@@ -1545,6 +1545,7 @@ dependencies = [
  "bip39",
  "bitcoin",
  "boma-core",
+ "dirs",
  "serde",
  "serde_json",
  "tauri",
