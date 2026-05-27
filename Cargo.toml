@@ -1,17 +1,7 @@
-[package]
-name = "boma"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
-bip39 = "1.0"
-bitcoin = "0.29"
-rand = "0.8"
-hmac = "0.12"
-sha2 = "0.10"
-pbkdf2 = "0.11"
-aes-gcm = "0.10"
-zeroize = { version = "1.7", features = ["derive"] }
-hex = "0.4"
-qrcode = "0.13"
-rpassword = "7.5.3"
+[workspace]
+resolver = "2"
+members = [
+    "core",
+    "cli",
+    "gui/src-tauri",
+]

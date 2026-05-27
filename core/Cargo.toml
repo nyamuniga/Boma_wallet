@@ -1,0 +1,17 @@
+[package]
+name = "boma-core"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+bip39 = "1.0"
+bitcoin = "0.29"
+rand = "0.8"
+hmac = "0.12"
+sha2 = "0.10"
+pbkdf2 = "0.11"
+aes-gcm = "0.10"
+zeroize = { version = "1.7", features = ["derive"] }
+hex = "0.4"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"

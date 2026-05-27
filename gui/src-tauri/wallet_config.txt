@@ -1,0 +1,3 @@
+# BOMA Cold Wallet Configuration
+network=mainnet
+session_timeout_secs=300

@@ -1,0 +1,20 @@
+@import "tailwindcss";
+
+@theme {
+  /* Brand Accent: Burnt Orange from Logo (#a55130) */
+  --color-orange-400: #d67954;
+  --color-orange-500: #a55130;
+  --color-orange-600: #8c4224;
+  
+  /* Brand Background: Deep Charcoal from Logo (#1e1e1e) */
+  --color-neutral-800: #2d2d2d;
+  --color-neutral-900: #1e1e1e;
+  --color-neutral-950: #161616;
+  --color-black: #0a0a0a;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in { animation: fade-in 0.25s ease-out both; }

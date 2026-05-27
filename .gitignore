@@ -1,2 +1,5 @@
 /target
 backup.txt
+CLEAN_CODE_AUDIT.md
+gui/src-tauri/binaries
+gui/src-tauri/target
