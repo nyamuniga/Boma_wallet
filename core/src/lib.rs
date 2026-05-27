@@ -7,6 +7,7 @@ pub mod generate_entropy;
 pub mod generate_many_addresses;
 pub mod generate_mnemonic;
 pub mod get_random_address;
+pub mod psbt;
 pub mod store_backup;
 pub mod wallet_info;
 pub mod transaction;

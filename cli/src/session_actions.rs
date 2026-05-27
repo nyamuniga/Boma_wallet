@@ -274,3 +274,97 @@ pub fn handle_restore_wallet(cfg: &boma_core::config::Config, audit: &crate::aud
     ui::pause();
 }
 
+pub fn handle_sign_psbt(state: &SessionState) {
+    use boma_core::psbt::{parse_psbt, parse_psbt_from_base64, sign_psbt, export_psbt, psbt_to_base64};
+
+    ui::header("", &format!("[{}] > Sign PSBT", state.fingerprint));
+    ui::info("Input method:");
+    ui::menu(&[
+        ("1", "Load .psbt file from disk"),
+        ("2", "Paste base64 PSBT string (e.g. from QR code)"),
+    ]);
+
+    let choice = ui::prompt("Choice", "1 = file, 2 = paste");
+    let parse_result = match choice.trim() {
+        "1" => {
+            let path = ui::prompt("Path to .psbt file", "Full file path, e.g. /media/usb/unsigned.psbt");
+            parse_psbt(&path)
+        }
+        "2" => {
+            ui::info("Paste the base64 PSBT string and press Enter:");
+            let b64 = ui::prompt("Base64 PSBT", "Paste here.");
+            parse_psbt_from_base64(&b64)
+        }
+        _ => { ui::error("Invalid choice."); ui::pause(); return; }
+    };
+
+    let (psbt, summary) = match parse_result {
+        Ok(r) => r,
+        Err(e) => { ui::error(&format!("Failed to parse PSBT: {}", e)); ui::pause(); return; }
+    };
+
+    // Display summary
+    println!();
+    ui::section("Transaction Summary");
+    println!("  Inputs        {}", summary.input_count);
+    println!("  Outputs       {}", summary.output_count);
+    println!("  Total in      {} sats  ({:.8} BTC)", summary.input_sats, summary.input_sats as f64 / 1e8);
+    println!("  Sending       {} sats  ({:.8} BTC)", summary.send_sats, summary.send_sats as f64 / 1e8);
+    println!("  Miner fee     {}{} sats  ({:.4}%){}",
+        if summary.fee_warning { ui::YELLOW } else { ui::RESET },
+        summary.fee_sats, summary.fee_pct,
+        ui::RESET
+    );
+    if summary.fee_warning {
+        ui::warn("⚠  Fee is unusually HIGH (>5% of input). Verify before signing!");
+    }
+    println!();
+    ui::section("Destination Addresses");
+    for addr in &summary.destinations {
+        println!("  {}{}{}", ui::CYAN, addr, ui::RESET);
+    }
+    println!();
+
+    let confirm = ui::prompt("Sign this transaction? [yes/no]", "Type 'yes' to authorize signing.");
+    if confirm != "yes" {
+        ui::info("Signing cancelled.");
+        ui::pause();
+        return;
+    }
+
+    let signed = match sign_psbt(psbt, &state.root_key, state.cfg.network) {
+        Ok(p) => p,
+        Err(e) => { ui::error(&format!("Signing failed: {}", e)); ui::pause(); return; }
+    };
+
+    ui::success("PSBT signed successfully!");
+    println!();
+    ui::info("Export options:");
+    ui::menu(&[
+        ("1", "Save as .psbt file"),
+        ("2", "Display as base64 (copy for QR)"),
+        ("3", "Both"),
+    ]);
+
+    let export_choice = ui::prompt("Choice", "How to export the signed PSBT.");
+    match export_choice.trim() {
+        "1" | "3" => {
+            let out_path = ui::prompt("Output path", "e.g. /media/usb/signed.psbt");
+            match export_psbt(&signed, &out_path) {
+                Ok(()) => ui::success(&format!("Signed PSBT saved to '{}'.", out_path)),
+                Err(e) => ui::error(&e),
+            }
+            if export_choice.trim() == "1" { state.audit.log("PSBT_SIGNED"); ui::pause(); return; }
+        }
+        _ => {}
+    }
+    if export_choice.trim() == "2" || export_choice.trim() == "3" {
+        let b64 = psbt_to_base64(&signed);
+        println!();
+        ui::info("Base64 signed PSBT (import into Sparrow or scan as QR):");
+        println!("\n  {}{}{}\n", ui::CYAN, b64, ui::RESET);
+    }
+
+    state.audit.log("PSBT_SIGNED");
+    ui::pause();
+}
