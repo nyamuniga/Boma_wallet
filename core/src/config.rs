@@ -64,7 +64,7 @@ impl Config {
         if self.network == Network::Bitcoin { "Mainnet ₿" } else { "Testnet ₿" }
     }
 
-    /// BIP-44 coin type (0 = mainnet, 1 = testnet)
+    //// BIP-44 coin type (0 = mainnet, 1 = testnet)
     #[allow(dead_code)]
     pub fn coin_type(&self) -> u32 {
         if self.network == Network::Bitcoin { 0 } else { 1 }
