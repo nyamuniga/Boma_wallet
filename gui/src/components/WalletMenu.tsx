@@ -50,25 +50,27 @@ export default function WalletMenu({ dashboard, passphrase, onNavigate, onLock, 
           ]} />
 
           <MenuSection title="Send" items={[
-            { id: "menu-sign-tx", label: "3. Sign transaction (offline)", onClick: () => onNavigate("sign_tx") },
-            { id: "menu-dry-run", label: "4. Dry run — preview transaction", onClick: () => onNavigate("dry_run") },
-            { id: "menu-import-utxos", label: "5. Import UTXOs from CSV", onClick: () => onNavigate("import_utxos") },
+            { id: "menu-sign-psbt", label: "3. Sign PSBT file (Recommended)", onClick: () => onNavigate("sign_psbt") },
+            { id: "menu-sign-psbt-qr", label: "4. Load PSBT from Base64/QR", onClick: () => onNavigate("sign_psbt_qr") },
+            { id: "menu-sign-tx", label: "5. [Advanced] Sign raw transaction", onClick: () => onNavigate("sign_tx") },
+            { id: "menu-dry-run", label: "6. [Advanced] Dry run preview", onClick: () => onNavigate("dry_run") },
+            { id: "menu-import-utxos", label: "7. [Advanced] Import UTXOs from CSV", onClick: () => onNavigate("import_utxos") },
           ]} />
 
           <div className="md:col-span-2">
             <MenuSection title="Wallet" items={[
-              { id: "menu-summary", label: "6. Wallet summary", onClick: () => onNavigate("summary") },
-              { id: "menu-export-xpub", label: "7. Export watch-only xpub", onClick: handleExportXpub },
-              { id: "menu-export-desc", label: "8. Export wallet descriptor", onClick: handleExportDescriptor },
-              { id: "menu-view-phrase", label: "9. View recovery phrase", onClick: () => onNavigate("view_phrase") },
-              { id: "menu-change-pass", label: "10. Change passphrase", onClick: () => onNavigate("change_pass") },
+              { id: "menu-summary", label: "8. Wallet summary", onClick: () => onNavigate("summary") },
+              { id: "menu-export-xpub", label: "9. Export watch-only xpub", onClick: handleExportXpub },
+              { id: "menu-export-desc", label: "10. Export wallet descriptor", onClick: handleExportDescriptor },
+              { id: "menu-view-phrase", label: "11. View recovery phrase", onClick: () => onNavigate("view_phrase") },
+              { id: "menu-change-pass", label: "12. Change passphrase", onClick: () => onNavigate("change_pass") },
             ]} />
             <button
               id="menu-lock"
               onClick={onLock}
               className="mt-4 text-sm text-red-500 hover:text-red-400 font-mono cursor-pointer"
             >
-              11. Lock wallet
+              13. Lock wallet
             </button>
           </div>
         </div>

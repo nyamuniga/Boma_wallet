@@ -4,6 +4,7 @@ use boma_core::derive_seed_from_mnemonic::derive_seed_from_mnemonic;
 use boma_core::derive_keys::derive_keys;
 use boma_core::generate_many_addresses::generate_many_addresses;
 use boma_core::store_backup::{store_backup, load_backup};
+use boma_core::psbt::{parse_psbt, parse_psbt_from_base64, sign_psbt, export_psbt, psbt_to_base64, PsbtSummary};
 use bitcoin::network::constants::Network;
 use serde::Serialize;
 use std::path::Path;
@@ -159,6 +160,46 @@ fn build_transaction(
     build_tx(&p)
 }
 
+#[tauri::command]
+fn load_psbt(path: &str) -> Result<PsbtSummary, String> {
+    parse_psbt(path).map(|(_, summary)| summary)
+}
+
+#[tauri::command]
+fn load_psbt_from_base64(b64: &str) -> Result<PsbtSummary, String> {
+    parse_psbt_from_base64(b64).map(|(_, summary)| summary)
+}
+
+#[tauri::command]
+fn sign_and_export_psbt(
+    passphrase: &str,
+    input_data: &str,
+    is_base64: bool,
+    output_path: Option<&str>,
+) -> Result<String, String> {
+    let cfg = boma_core::config::Config::load();
+    let mnemonic_str = load_backup(passphrase, "backup.txt").map_err(|e| e.to_string())?;
+    let seed = derive_seed_from_mnemonic(&mnemonic_str, passphrase);
+    let root_key = derive_keys(&seed, cfg.network).map_err(|e| e.to_string())?.0;
+
+    let (psbt, _) = if is_base64 {
+        parse_psbt_from_base64(input_data)?
+    } else {
+        parse_psbt(input_data)?
+    };
+
+    let signed = sign_psbt(psbt, &root_key, cfg.network)?;
+
+    if let Some(out_path) = output_path {
+        if !out_path.is_empty() {
+            export_psbt(&signed, out_path)?;
+        }
+    }
+
+    Ok(psbt_to_base64(&signed))
+}
+
+
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct ConfigData {
     network: String,
@@ -207,7 +248,10 @@ pub fn run() {
             import_utxos,
             build_transaction,
             get_settings,
-            update_settings
+            update_settings,
+            load_psbt,
+            load_psbt_from_base64,
+            sign_and_export_psbt
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

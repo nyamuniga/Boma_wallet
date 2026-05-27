@@ -6,6 +6,7 @@ import { useToast, ToastContainer } from "./hooks/useToast";
 import AuthScreen from "./components/AuthScreen";
 import WalletMenu from "./components/WalletMenu";
 import TransactionBuilder from "./components/TransactionBuilder";
+import PsbtSigner from "./components/PsbtSigner";
 import {
   ReceiveView,
   AllAddressesView,
@@ -103,6 +104,22 @@ export default function App() {
               dryRun={activeView === "dry_run"}
               preloadedUtxos={preloadedUtxos}
               showToast={showToast}
+            />
+          )}
+          {activeView === "sign_psbt" && (
+            <PsbtSigner
+              passphrase={passphrase}
+              isBase64={false}
+              showToast={showToast}
+              onDone={() => setActiveView("main")}
+            />
+          )}
+          {activeView === "sign_psbt_qr" && (
+            <PsbtSigner
+              passphrase={passphrase}
+              isBase64={true}
+              showToast={showToast}
+              onDone={() => setActiveView("main")}
             />
           )}
         </div>

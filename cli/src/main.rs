@@ -227,19 +227,20 @@ fn wallet_session(state: &mut SessionState) {
         ]);
         ui::section("Send");
         ui::menu(&[
-            ("3", "Sign transaction  (offline)"),
-            ("4", "Dry run  — preview transaction without signing"),
-            ("5", "Import UTXOs from CSV file"),
+            ("3", "Sign PSBT File (Recommended)"),
+            ("4", "[Advanced] Sign raw transaction manually"),
+            ("5", "[Advanced] Dry run preview"),
+            ("6", "[Advanced] Import UTXOs from CSV"),
         ]);
         ui::section("Wallet");
         ui::menu(&[
-            ("6",  "Wallet summary & fingerprint"),
-            ("7",  "Export watch-only xpub"),
-            ("8",  "Export wallet descriptor"),
-            ("9",  "View recovery phrase"),
-            ("10", "Verify backup integrity"),
-            ("11", "Change passphrase"),
-            ("12", "Lock wallet"),
+            ("7",  "Wallet summary & fingerprint"),
+            ("8",  "Export watch-only xpub"),
+            ("9",  "Export wallet descriptor"),
+            ("10", "View recovery phrase"),
+            ("11", "Verify backup integrity"),
+            ("12", "Change passphrase"),
+            ("13", "Lock wallet"),
         ]);
 
         let choice = ui::prompt("\nChoice", "Type a number. Type '?' at any prompt for help.");
@@ -248,22 +249,23 @@ fn wallet_session(state: &mut SessionState) {
         match choice.as_str() {
             "1"  => session_actions::handle_receive_address(state),
             "2"  => session_actions::handle_view_all_addresses(state),
-            "3"  => session_actions::handle_sign_transaction(state),
-            "4"  => session_actions::handle_dry_run(state),
-            "5"  => session_actions::handle_import_utxos(state),
-            "6"  => session_actions::handle_wallet_summary(state),
-            "7"  => session_actions::handle_export_xpub(state),
-            "8"  => session_actions::handle_export_descriptor(state),
-            "9"  => session_actions::handle_view_phrase(state),
-            "10" => session_actions::handle_verify_backup(),
-            "11" => session_actions::handle_change_passphrase(state),
-            "12" => {
+            "3"  => session_actions::handle_sign_psbt(state),
+            "4"  => session_actions::handle_sign_transaction(state),
+            "5"  => session_actions::handle_dry_run(state),
+            "6"  => session_actions::handle_import_utxos(state),
+            "7"  => session_actions::handle_wallet_summary(state),
+            "8"  => session_actions::handle_export_xpub(state),
+            "9"  => session_actions::handle_export_descriptor(state),
+            "10" => session_actions::handle_view_phrase(state),
+            "11" => session_actions::handle_verify_backup(),
+            "12" => session_actions::handle_change_passphrase(state),
+            "13" => {
                 state.audit.log("SESSION_END");
                 ui::info("Wallet locked. All key material cleared from memory.");
                 return;
             }
 
-            _ => ui::error("Invalid choice — enter 1 to 12."),
+            _ => ui::error("Invalid choice — enter 1 to 13."),
         }
     }
 }
