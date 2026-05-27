@@ -12,12 +12,12 @@ pub fn get_fingerprint(root_key: &ExtendedPrivKey) -> String {
     hex::encode(xpub.fingerprint().as_bytes())
 }
 
-/// Derives the account-level extended public key at m/44'/{coin}'/0'.
+/// Derives the account-level extended public key at m/84'/{coin}'/0'.
 /// This xpub can generate all receive and change addresses but CANNOT sign.
 pub fn get_account_xpub(root_key: &ExtendedPrivKey, network: Network) -> Result<String, String> {
     let secp = Secp256k1::new();
     let coin = if network == Network::Bitcoin { 0 } else { 1 };
-    let path = DerivationPath::from_str(&format!("m/44'/{}'/0'", coin))
+    let path = DerivationPath::from_str(&format!("m/84'/{}'/0'", coin))
         .map_err(|e| e.to_string())?;
     let account_key = root_key
         .derive_priv(&secp, &path)
@@ -27,10 +27,10 @@ pub fn get_account_xpub(root_key: &ExtendedPrivKey, network: Network) -> Result<
 }
 
 /// Returns a standard output descriptor for the wallet's external receive chain.
-/// Format: pkh(xpub/0/*) — compatible with Electrum, Sparrow, Bitcoin Core.
+/// Format: wpkh(xpub/0/*) — compatible with Electrum, Sparrow, Bitcoin Core.
 pub fn get_descriptor(root_key: &ExtendedPrivKey, network: Network) -> Result<String, String> {
     let xpub = get_account_xpub(root_key, network)?;
-    Ok(format!("pkh({}/0/*)", xpub))
+    Ok(format!("wpkh({}/0/*)", xpub))
 }
 
 /// Writes the xpub and descriptor to watch_wallet.txt.

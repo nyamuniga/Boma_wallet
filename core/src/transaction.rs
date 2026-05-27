@@ -19,10 +19,10 @@ pub fn btc_to_sats(s: &str) -> Result<u64, String> {
     Ok((v * 100_000_000.0).round() as u64)
 }
 
-/// Estimate P2PKH transaction size in virtual bytes.
-/// Formula: 10 (header) + 148×inputs + 34×outputs
+/// Estimate Native SegWit (P2WPKH) transaction size in virtual bytes.
+/// Formula: 10.5 (header) + 68×inputs + 31×outputs
 pub fn estimate_vbytes(n_inputs: usize, n_outputs: usize) -> u64 {
-    (10 + 148 * n_inputs + 34 * n_outputs) as u64
+    (10.5 + 68.0 * n_inputs as f64 + 31.0 * n_outputs as f64).ceil() as u64
 }
 
 /// Returns (slow, standard, fast) fee in satoshis for a given vsize.
@@ -92,7 +92,7 @@ pub struct TxParams<'a> {
     pub dry_run: bool,
 }
 
-/// Build (and optionally sign) a P2PKH transaction.
+/// Build (and optionally sign) a P2WPKH transaction.
 ///
 /// In dry-run mode, returns the unsigned hex to show the structure without signing.
 /// RBF sets nSequence = 0xFFFFFFFD to signal replaceability.
@@ -145,12 +145,17 @@ pub fn build_transaction(p: &TxParams) -> Result<String, String> {
         return Ok(format!("DRY_RUN:{}", hex::encode(serialize(&tx))));
     }
 
-    // Sign the P2PKH input
+    // Sign the P2WPKH input
     let secp = Secp256k1::new();
-    let script_pubkey = p.from_address.script_pubkey();
+    let pub_key = bitcoin::PublicKey::new(p.from_key.public_key(&secp));
+    
+    // For P2WPKH, the scriptCode used for the sighash is actually the P2PKH script pubkey
+    // of the same public key.
+    let script_code = Address::p2pkh(&pub_key, p.from_address.network).script_pubkey();
+    
     let sighash = {
-        let cache = SighashCache::new(&tx);
-        cache.legacy_signature_hash(0, &script_pubkey, EcdsaSighashType::All as u32)
+        let mut cache = SighashCache::new(&tx);
+        cache.segwit_signature_hash(0, &script_code, p.input_sats, EcdsaSighashType::All)
             .map_err(|e| format!("Sighash failed: {}", e))?
     };
 
@@ -162,10 +167,14 @@ pub fn build_transaction(p: &TxParams) -> Result<String, String> {
     sig_bytes.push(EcdsaSighashType::All as u8);
 
     let pubkey_bytes = p.from_key.public_key(&secp).serialize();
-    tx.input[0].script_sig = Builder::new()
-        .push_slice(&sig_bytes)
-        .push_slice(&pubkey_bytes)
-        .into_script();
+    
+    // In SegWit, the scriptSig is empty and signatures go into the Witness field
+    tx.input[0].script_sig = Builder::new().into_script();
+    
+    let mut witness = Witness::new();
+    witness.push(&sig_bytes);
+    witness.push(&pubkey_bytes);
+    tx.input[0].witness = witness;
 
     Ok(hex::encode(serialize(&tx)))
 }

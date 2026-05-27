@@ -5,7 +5,7 @@ use bitcoin::util::bip32::{DerivationPath, ExtendedPrivKey};
 use bitcoin::PublicKey;
 use std::str::FromStr;
 
-/// Shared helper to derive a sequence of addresses on a specific BIP-44 chain.
+/// Shared helper to derive a sequence of addresses on a specific BIP-84 chain.
 ///
 /// `chain_index`: 0 for external (receive), 1 for internal (change).
 pub fn derive_address_range(
@@ -19,7 +19,7 @@ pub fn derive_address_range(
     let mut addresses = Vec::new();
 
     for i in 0..count {
-        let path_str = format!("m/44'/{}'/0'/{}/{}", coin, chain_index, i);
+        let path_str = format!("m/84'/{}'/0'/{}/{}", coin, chain_index, i);
         let path = match DerivationPath::from_str(&path_str) {
             Ok(p) => p,
             Err(e) => {
@@ -37,7 +37,13 @@ pub fn derive_address_range(
 
         let priv_key = child.private_key;
         let pub_key = PublicKey::new(priv_key.public_key(&secp));
-        let address = Address::p2pkh(&pub_key, network);
+        let address = match Address::p2wpkh(&pub_key, network) {
+            Ok(addr) => addr,
+            Err(e) => {
+                eprintln!("Warning: could not create P2WPKH address at index {}: {}", i, e);
+                continue;
+            }
+        };
         addresses.push((address, priv_key));
     }
 

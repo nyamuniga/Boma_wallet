@@ -27,10 +27,38 @@ export default function App() {
   const [preloadedUtxos, setUtxos]      = useState<Utxo[]>([]);
   const { toasts, showToast }           = useToast();
 
+  const [sessionTimeout, setSessionTimeout] = useState<number>(300);
+
   // Prefetch wallet existence so AuthScreen can branch correctly
   useEffect(() => {
     invoke<boolean>("check_wallet_exists");
+    invoke<{session_timeout_secs: number}>("get_settings")
+      .then(s => setSessionTimeout(s.session_timeout_secs))
+      .catch(console.error);
   }, []);
+
+  // Session timeout logic
+  useEffect(() => {
+    if (!dashboard) return;
+    
+    let timeoutId: number;
+    const resetTimer = () => {
+      window.clearTimeout(timeoutId);
+      timeoutId = window.setTimeout(() => {
+        handleLock();
+        showToast("Session expired due to inactivity. Wallet locked.", "error");
+      }, sessionTimeout * 1000);
+    };
+
+    resetTimer();
+    const events = ["mousedown", "keydown", "scroll", "touchstart"];
+    events.forEach(e => window.addEventListener(e, resetTimer));
+
+    return () => {
+      window.clearTimeout(timeoutId);
+      events.forEach(e => window.removeEventListener(e, resetTimer));
+    };
+  }, [dashboard, sessionTimeout]);
 
   const handleLogin = (data: DashboardData, pass: string) => {
     setDashboard(data);

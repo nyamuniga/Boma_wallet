@@ -5,9 +5,9 @@ use bitcoin::util::bip32::{DerivationPath, ExtendedPrivKey};
 use bitcoin::PublicKey;
 use std::str::FromStr;
 
-/// Derives the master root key and the first BIP-44 receive address.
+/// Derives the master root key and the first BIP-84 receive address.
 ///
-/// Derivation path: m/44'/{coin}'/0'/0/0
+/// Derivation path: m/84'/{coin}'/0'/0/0
 /// - coin = 0 for mainnet, 1 for testnet
 pub fn derive_keys(
     seed: &[u8],
@@ -19,7 +19,7 @@ pub fn derive_keys(
     let root_key = ExtendedPrivKey::new_master(network, seed)
         .map_err(|e| format!("Failed to create master key: {}", e))?;
 
-    let path = DerivationPath::from_str(&format!("m/44'/{}'/0'/0/0", coin))
+    let path = DerivationPath::from_str(&format!("m/84'/{}'/0'/0/0", coin))
         .map_err(|e| format!("Invalid derivation path: {}", e))?;
 
     let child = root_key
@@ -28,7 +28,8 @@ pub fn derive_keys(
 
     let priv_key = child.private_key;
     let pub_key = PublicKey::new(priv_key.public_key(&secp));
-    let address = Address::p2pkh(&pub_key, network);
+    let address = Address::p2wpkh(&pub_key, network)
+        .map_err(|e| format!("Failed to create P2WPKH address: {}", e))?;
 
     Ok((root_key, priv_key, pub_key, address))
 }
