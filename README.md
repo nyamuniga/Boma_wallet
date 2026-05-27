@@ -1,58 +1,44 @@
 <div align="center">
-  <img src="/Users/mac/.gemini/antigravity-ide/brain/0d5e60e9-5e87-4dd1-a92b-6a529fbc9313/boma_wallet_logo_1779874020050.png" width="300" alt="BOMA Wallet Logo">
+  <img src="https://res.cloudinary.com/dlsbepbro/image/upload/v1779875405/boma-logo_yuncve.png" width="300" alt="BOMA Wallet Logo">
   <h1>BOMA Cold Wallet</h1>
-  <p><b>A highly secure, offline-first Bitcoin storage solution.</b></p>
+  <p><b>A highly secure, offline-first Bitcoin Wallet.</b></p>
 </div>
 
 ---
 
-BOMA (meaning "fortified enclosure" or "stronghold") is a terminal-based, air-gapped Bitcoin wallet designed for maximum security. It allows you to generate keys, receive funds, and sign transactions entirely offline, ensuring your private keys never touch the internet.
+BOMA (meaning "fortified enclosure" or "stronghold") is a terminal-based, air-gapped Bitcoin wallet designed for maximum security. It allows you to generate keys, receive funds, and sign transactions entirely offline, ensuring your private keys never touch the internet. 
 
----
+BOMA is written entirely in Rust and strictly adheres to Bitcoin standards (BIP-39, BIP-32, BIP-44) for full interoperability with other major wallets like Electrum, Sparrow, and Ledger.
 
-## 🛡️ For Users (No Coding Experience Required)
+## What BOMA Does
 
-BOMA is designed to be run on a secure, offline computer. It helps you generate a "Recovery Phrase" (your master key) and creates an encrypted backup file so you don't have to type your phrase every time.
-
-### How to use BOMA securely:
-
-1. **Get the executable:** Move the `boma` application file to a USB thumb drive.
-2. **Go offline:** Plug the USB drive into a computer that is **completely disconnected from the internet** (and preferably will never connect again).
-3. **Run the wallet:**
-   - On Mac/Linux, open your Terminal, drag the `boma` file into it, and press Enter.
-   - On Windows, double-click the `boma.exe` file or run it via Command Prompt.
-
-### Core Features
-- **Create a New Wallet:** Generates a secure 12-word or 24-word Recovery Phrase. **Write this down on paper.** BOMA will encrypt this phrase with a passphrase of your choosing and save it to a local `backup.txt` file.
-- **Receive Bitcoin:** View your receive addresses. BOMA even generates scannable QR codes right in your terminal so you can easily send funds to your cold wallet from your phone.
-- **Send Bitcoin (Offline Signing):** To send funds out of BOMA, you follow a secure "air-gapped" workflow:
-  1. Use an internet-connected device to find the "UTXO" (the specific chunk of Bitcoin you want to spend) via a block explorer.
-  2. In BOMA (offline), enter those details and the recipient address.
-  3. BOMA will sign the transaction and give you a long string of text (Hex).
-  4. Copy that text to your online device and paste it into a transaction broadcaster (like `https://blockstream.info/tx/push`).
-- **Watch-Only Wallet:** You can export an "xpub" file. This file contains no private keys and is 100% safe to put on an online computer to track your balances without risking your funds.
+- **Creates Secure Wallets:** Generates a secure 12-word or 24-word Recovery Phrase using OS-level cryptographic entropy. It encrypts this phrase locally with AES-256-GCM so you don't have to type your phrase every time you log in.
+- **Receives Bitcoin:** Generates receive addresses and displays scannable QR codes right in your terminal, making it easy to send funds to your cold wallet from your phone.
+- **Signs Transactions Offline:** Allows you to securely spend your Bitcoin without your private keys ever touching an internet-connected device.
+- **Protects Memory:** Actively wipes sensitive materials (like the master seed) from your computer's RAM immediately after keys are derived.
+- **Exports Watch-Only Data:** Exports an "xpub" file that contains no private keys, which you can safely load onto an online computer to track your balances and receive payments.
 
 > [!WARNING]
 > **Never store your Recovery Phrase digitally.** Do not take a photo of it, and do not save it in a text file. If someone finds your Recovery Phrase, they can steal your Bitcoin.
 
----
+## Instructions & Usage
 
-## 💻 For Developers
+For maximum security, BOMA is designed to be run on an air-gapped computer.
 
-BOMA is written entirely in Rust and strictly adheres to Bitcoin standards (BIP-39, BIP-32, BIP-44) for full interoperability with other major wallets like Electrum, Sparrow, and Ledger.
+1. **Get the Executable:** Build the application (instructions below) and move the `boma` executable file to a USB thumb drive.
+2. **Go Offline:** Plug the USB drive into a computer that is **completely disconnected from the internet**.
+3. **Run the Wallet:** Open your Terminal, drag the `boma` file into it, and press Enter. 
 
-### Tech Stack & Security
-- **Language:** Rust (edition 2021)
-- **Cryptography:**
-  - `bitcoin` crate (v0.29) for standard key derivation and P2PKH tx signing via `SighashCache`.
-  - `aes-gcm` (AES-256-GCM) for authenticated encryption of the local backup file.
-  - OS-level entropy (`OsRng`) for mnemonic generation.
-- **Memory Safety:** Sensitive materials (like the master seed) are actively wiped from RAM after key derivation using the `zeroize` crate.
-- **Dependencies:** Minimal footprint. CLI interactions use raw ANSI codes and built-in OS tools (like `stty` on Unix) to prevent dependency bloat.
+### How to Send Bitcoin (Offline Signing Workflow)
+Because BOMA cannot connect to the internet to broadcast a transaction, you must follow this secure workflow to send funds:
+1. Use an internet-connected device to look up your Bitcoin address on a block explorer and find the "UTXO" (the unspent chunk of Bitcoin you want to spend).
+2. In the offline BOMA app, select "Sign transaction" and enter the UTXO details and the recipient address.
+3. BOMA will mathematically sign the transaction and output a long string of text called "Raw Hex".
+4. Copy that Hex text, transfer it back to your online device, and paste it into a transaction broadcaster (like `https://blockstream.info/tx/push`).
 
-### Build Instructions
+## Build Instructions
 
-You will need [Rust and Cargo](https://rustup.rs/) installed.
+To compile the application yourself, you will need [Rust and Cargo](https://rustup.rs/) installed.
 
 1. **Clone & Build:**
    ```bash
@@ -60,23 +46,24 @@ You will need [Rust and Cargo](https://rustup.rs/) installed.
    cd boma
    cargo build --release
    ```
-2. **Run:**
-   The optimized, standalone binary will be placed in `target/release/boma`.
+2. **Locate Executable:**
+   The highly optimized, standalone binary will be generated at:
    ```bash
-   ./target/release/boma
+   target/release/boma
    ```
 
-### Architecture Highlights
+## Architecture Details
 - **BIP-44 Standard:** Receive addresses derived at `m/44'/0'/0'/0/{i}` and change addresses at `m/44'/0'/0'/1/{i}`.
 - **RBF (Replace-By-Fee):** Supported natively via sequence `0xFFFFFFFD`.
 - **Dynamic Fee Estimation:** Built-in P2PKH vbyte calculator.
 - **Mainnet / Testnet Support:** Configurable via `wallet_config.txt`.
-- **Stateless Operation:** The wallet runs entirely in memory. The `backup.txt` file only contains the AES-GCM nonce, salt, and ciphertext. Authentication acts as the decryption key.
+- **Stateless Operation:** The wallet runs entirely in memory. The `backup.txt` file only contains the AES-GCM nonce, salt, and ciphertext. 
 
-### Developer Roadmap (Future Enhancements)
-- PSBT (Partially Signed Bitcoin Transactions - BIP-174) support.
-- Native SegWit (bech32) address derivation.
-- Multi-sig (BIP-45) capabilities.
+## Open Source & Contributing
+BOMA is fully open-source. We believe security tools must be transparent and verifiable by the community. Contributions, issues, and feature requests are highly encouraged!
+
+## License
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ---
 *BOMA: Your keys, your fortress.*
