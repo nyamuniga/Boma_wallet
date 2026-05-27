@@ -72,8 +72,8 @@ export function ViewPhrase({ passphrase, showToast }: { passphrase: string; show
   const [input, setInput]           = useState("");
 
   const handleReveal = async () => {
-    if (input.toLowerCase() !== "view") {
-      showToast("You must type 'view' to confirm.", "error");
+    if (input !== passphrase) {
+      showToast("Incorrect passphrase.", "error");
       return;
     }
     try {
@@ -96,16 +96,16 @@ export function ViewPhrase({ passphrase, showToast }: { passphrase: string; show
           </button>
         ) : (
           <div className="bg-neutral-900 p-4 rounded border border-neutral-800 space-y-3">
-            <p className="text-neutral-400 text-sm">Type <span className="text-white font-bold">view</span> to display your recovery phrase on screen.</p>
+            <p className="text-neutral-400 text-sm">Enter your <span className="text-white font-bold">passphrase</span> to display your recovery phrase.</p>
             <div className="flex gap-2">
               <input
                 id="phrase-confirm-input"
-                type="text"
+                type="password"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleReveal()}
                 className="bg-black border border-neutral-800 rounded p-2 text-white outline-none focus:border-orange-500 font-mono"
-                placeholder="view"
+                placeholder="Passphrase"
                 autoFocus
               />
               <button onClick={handleReveal} className="px-6 py-2 bg-red-600 text-white rounded hover:bg-red-500 transition-all">
@@ -139,23 +139,33 @@ export function ChangePassphrase({
   onPassphraseChanged: (newPass: string) => void;
   showToast: (m: string, t?: ToastType) => void;
 }) {
+  const [oldPassInput, setOldPassInput] = useState("");
   const [newPass, setNewPass]   = useState("");
   const [confirm, setConfirm]   = useState("");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (newPass !== confirm) { showToast("Passphrases do not match!", "error"); return; }
+    if (oldPassInput !== oldPassphrase) { showToast("Incorrect old passphrase.", "error"); return; }
+    if (newPass !== confirm) { showToast("New passphrases do not match!", "error"); return; }
     try {
       await invoke("change_passphrase", { oldPassphrase, newPassphrase: newPass });
       onPassphraseChanged(newPass);
       showToast("Passphrase changed successfully.", "success");
-      setNewPass(""); setConfirm("");
+      setOldPassInput(""); setNewPass(""); setConfirm("");
     } catch (e: any) { showToast(String(e), "error"); }
   };
 
   return (
     <form onSubmit={handleSubmit} className="max-w-md space-y-4">
       <h2 className="text-orange-400 text-lg mb-4">Change Passphrase</h2>
+      <input
+        id="old-passphrase"
+        type="password"
+        placeholder="Old Passphrase"
+        value={oldPassInput}
+        onChange={(e) => setOldPassInput(e.target.value)}
+        className="w-full bg-neutral-900 p-3 rounded border border-neutral-800 focus:border-orange-500 outline-none text-white"
+      />
       <input
         id="new-passphrase"
         type="password"
@@ -167,7 +177,7 @@ export function ChangePassphrase({
       <input
         id="confirm-passphrase"
         type="password"
-        placeholder="Confirm Passphrase"
+        placeholder="Confirm New Passphrase"
         value={confirm}
         onChange={(e) => setConfirm(e.target.value)}
         className="w-full bg-neutral-900 p-3 rounded border border-neutral-800 focus:border-orange-500 outline-none text-white"
