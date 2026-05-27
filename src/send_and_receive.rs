@@ -176,13 +176,13 @@ pub fn build_transaction(p: &TxParams) -> Result<String, String> {
 
 /// Full interactive guided send flow with all safety checks.
 ///
-/// Returns the signed (or dry-run) transaction hex.
-pub fn guided_send(
-    receive_addresses: &[(Address, SecretKey)],
-    change_addresses: &[(Address, SecretKey)],
+/// Collects the parameters and returns a populated TxParams struct.
+pub fn collect_send_params<'a>(
+    receive_addresses: &'a [(Address, SecretKey)],
+    change_addresses: &'a [(Address, SecretKey)],
     preloaded_utxos: &[Utxo],
     dry_run: bool,
-) -> Result<String, String> {
+) -> Result<TxParams<'a>, String> {
     let crumb = if dry_run { "Wallet > Dry Run" } else { "Wallet > Sign Transaction" };
     ui::header("", crumb);
 
@@ -313,27 +313,20 @@ pub fn guided_send(
     };
 
     let change_sats = input_sats.saturating_sub(send_sats + fee_sats);
-    let has_change = change_sats >= DUST_SATS;
+
 
     // ── Summary ───────────────────────────────────────────────────────────────
-    println!();
-    ui::divider();
-    println!("  {}{}Transaction Summary{}", ui::BOLD, ui::CYAN, ui::RESET);
-    ui::divider();
-    println!("  From:      {}", from_address);
-    println!("  To:        {}{}{}", ui::GREEN, to_address, ui::RESET);
-    println!("  Send:      {:.8} BTC  ({} sats)", send_sats as f64/1e8, send_sats);
-    println!("  Fee:       {:.8} BTC  ({} sats)", fee_sats as f64/1e8, fee_sats);
-    if has_change {
-        println!("  Change:    {:.8} BTC  ({} sats)  → {}", change_sats as f64/1e8, change_sats, change_address);
-    } else if change_sats > 0 {
-        println!("  Change:    {} sats  {}(below dust — absorbed into fee){}", change_sats, ui::DIM, ui::RESET);
-    }
-    println!("  RBF:       {}", if use_rbf { "yes — fee can be bumped later" } else { "no" });
-    if dry_run {
-        println!("  {}{}MODE: DRY RUN — will NOT be signed{}", ui::BOLD, ui::YELLOW, ui::RESET);
-    }
-    ui::divider();
+    ui::print_transaction_summary(
+        from_address,
+        &to_address,
+        send_sats,
+        fee_sats,
+        change_sats,
+        change_address,
+        use_rbf,
+        dry_run,
+    );
+
 
     let action = if dry_run { "preview" } else { "sign" };
     let confirm = ui::prompt(
@@ -344,7 +337,7 @@ pub fn guided_send(
         return Err("Transaction cancelled.".to_string());
     }
 
-    let params = TxParams {
+    Ok(TxParams {
         from_address,
         from_key,
         txid_str,
@@ -356,9 +349,7 @@ pub fn guided_send(
         change_address,
         use_rbf,
         dry_run,
-    };
-
-    build_transaction(&params)
+    })
 }
 
 fn manual_utxo_entry() -> Result<(String, u32, u64), String> {

@@ -9,8 +9,11 @@ mod audit_log;
 mod config;
 mod wallet_info;
 mod qr_display;
+mod address_derivation;
 mod change_addresses;
 mod password_input;
+mod session_state;
+mod session_actions;
 
 mod generate_entropy;
 use generate_entropy::generate_entropy;
@@ -28,22 +31,20 @@ mod generate_many_addresses;
 use generate_many_addresses::generate_many_addresses;
 
 mod send_and_receive;
-use send_and_receive::{guided_send, import_utxos_from_csv, Utxo};
 
 mod store_backup;
 use store_backup::{load_backup, store_backup};
 
 mod get_utxos;
-use get_utxos::print_addresses;
 
 mod get_random_address;
-use get_random_address::get_random_address;
 
 mod restore_and_backup_master_key;
 
 use audit_log::AuditLog;
 use config::Config;
 use password_input::read_password;
+use session_state::SessionState;
 
 const BACKUP_FILE: &str = "backup.txt";
 
@@ -70,7 +71,7 @@ fn main() {
         match choice.as_str() {
             "1" => create_new_wallet(&cfg, &audit),
             "2" => login_with_passphrase(&cfg, &audit),
-            "3" => verify_backup_menu(),
+            "3" => session_actions::handle_verify_backup(),
             "4" => settings_menu(&mut cfg),
             "5" => { println!("\n  Goodbye!\n"); break; }
             _   => ui::error("Invalid choice — enter 1 to 5."),
@@ -193,45 +194,42 @@ fn login_with_passphrase(cfg: &Config, audit: &AuditLog) {
 
     ui::success(&format!("{} receive + {} change addresses ready.", receive_addresses.len(), change_addresses.len()));
 
-    // Enter wallet session
-    wallet_session(
-        &mnemonic_str, &receive_addresses, &change_addresses,
-        &root_key, &fingerprint, cfg, audit,
-    );
+    let mut state = SessionState {
+        mnemonic_str,
+        receive_addresses,
+        change_addresses,
+        root_key,
+        fingerprint,
+        cfg,
+        audit,
+        preloaded_utxos: Vec::new(),
+    };
+
+    wallet_session(&mut state);
 }
 
 // ── Wallet session ────────────────────────────────────────────────────────────
 
-fn wallet_session(
-    mnemonic_str:      &str,
-    receive_addresses: &[(bitcoin::util::address::Address, bitcoin::secp256k1::SecretKey)],
-    change_addresses:  &[(bitcoin::util::address::Address, bitcoin::secp256k1::SecretKey)],
-    root_key:          &bitcoin::util::bip32::ExtendedPrivKey,
-    fingerprint:       &str,
-    cfg:               &Config,
-    audit:             &AuditLog,
-) {
-    let timeout = Duration::from_secs(cfg.session_timeout_secs);
+fn wallet_session(state: &mut SessionState) {
+    let timeout = Duration::from_secs(state.cfg.session_timeout_secs);
     let mut last_activity = Instant::now();
-    let mut preloaded_utxos: Vec<Utxo> = Vec::new();
 
     loop {
-        // Session timeout check
         if last_activity.elapsed() >= timeout {
             ui::header("", "Session Timed Out");
             ui::warn(&format!(
                 "Wallet auto-locked after {} minutes of inactivity.",
-                cfg.session_timeout_secs / 60
+                state.cfg.session_timeout_secs / 60
             ));
-            audit.log("SESSION_TIMEOUT");
+            state.audit.log("SESSION_TIMEOUT");
             ui::pause();
             return;
         }
 
         let subtitle = format!(
             "[{}]  {}  │  timeout in {}s",
-            fingerprint,
-            cfg.network_label(),
+            state.fingerprint,
+            state.cfg.network_label(),
             timeout.saturating_sub(last_activity.elapsed()).as_secs()
         );
         ui::header("Wallet Menu", &subtitle);
@@ -254,189 +252,37 @@ fn wallet_session(
             ("8",  "Export wallet descriptor"),
             ("9",  "View recovery phrase"),
             ("10", "Verify backup integrity"),
-            ("11", "Lock wallet"),
+            ("11", "Change passphrase"),
+            ("12", "Lock wallet"),
         ]);
 
         let choice = ui::prompt("\nChoice", "Type a number. Type '?' at any prompt for help.");
-        last_activity = Instant::now(); // reset timer on any interaction
+        last_activity = Instant::now();
 
         match choice.as_str() {
-            // ── Receive ──────────────────────────────────────────────────────
-            "1" => {
-                ui::header("", &format!("[{}] > Receive", fingerprint));
-                match get_random_address(receive_addresses) {
-                    Ok(addr) => {
-                        println!("  {}{}Receive Address{}", ui::BOLD, ui::GREEN, ui::RESET);
-                        println!("  {}{}{}\n", ui::CYAN, addr, ui::RESET);
-                        ui::info("Scanning the QR code below sends Bitcoin to this address.");
-                        if let Err(e) = qr_display::print_qr(&addr) {
-                            ui::warn(&format!("QR render failed: {}", e));
-                        }
-                        audit.log("ADDRESS_SHOWN");
-                    }
-                    Err(e) => ui::error(&e),
-                }
-                ui::pause();
-            }
-
-            "2" => {
-                ui::header("", &format!("[{}] > All Addresses", fingerprint));
-                print_addresses("Receive  (m/44'/0'/0'/0/{i})", receive_addresses);
-                print_addresses("Change   (m/44'/0'/0'/1/{i})", change_addresses);
-                ui::pause();
-            }
-
-            // ── Send ─────────────────────────────────────────────────────────
-            "3" => {
-                match guided_send(receive_addresses, change_addresses, &preloaded_utxos, false) {
-                    Ok(hex) => {
-                        ui::header("", &format!("[{}] > Signed Transaction", fingerprint));
-                        ui::success("Transaction signed! Copy the hex below and broadcast it.");
-                        ui::info("Broadcast at: https://blockstream.info/tx/push");
-                        println!("\n  {}{}{}\n", ui::CYAN, hex, ui::RESET);
-                        audit.log("TX_SIGNED");
-                    }
-                    Err(e) => ui::error(&e),
-                }
-                ui::pause();
-            }
-
-            "4" => {
-                match guided_send(receive_addresses, change_addresses, &preloaded_utxos, true) {
-                    Ok(hex) => {
-                        ui::header("", &format!("[{}] > Dry Run Preview", fingerprint));
-                        let raw = hex.strip_prefix("DRY_RUN:").unwrap_or(&hex);
-                        ui::warn("DRY RUN — this transaction was NOT signed.");
-                        ui::info("Unsigned transaction hex (for inspection only):");
-                        println!("\n  {}{}{}\n", ui::DIM, raw, ui::RESET);
-                        audit.log("TX_DRY_RUN");
-                    }
-                    Err(e) => ui::error(&e),
-                }
-                ui::pause();
-            }
-
-            "5" => {
-                ui::header("", &format!("[{}] > Import UTXOs", fingerprint));
-                ui::info("CSV format: txid,vout,amount_btc,address  (one per line, # = comment)");
-                let path = ui::prompt("CSV file path", "Path to your UTXO CSV file.");
-                match import_utxos_from_csv(&path) {
-                    Ok(utxos) => {
-                        ui::success(&format!("{} UTXOs loaded.", utxos.len()));
-                        for u in &utxos {
-                            println!("  • {}…  vout {}  {} sats  ({})",
-                                &u.txid[..16], u.vout, u.amount_sats, u.address);
-                        }
-                        preloaded_utxos = utxos;
-                        audit.log("UTXOS_IMPORTED");
-                    }
-                    Err(e) => ui::error(&e),
-                }
-                ui::pause();
-            }
-
-            // ── Wallet info ───────────────────────────────────────────────────
-            "6" => {
-                ui::header("", &format!("[{}] > Wallet Summary", fingerprint));
-                ui::section("Identity");
-                println!("  Master fingerprint  {}{}{}", ui::CYAN, fingerprint, ui::RESET);
-                println!("  Network             {}", cfg.network_label());
-                println!("  Backup file         {}", BACKUP_FILE);
-                println!("  Backup exists       {}", if Path::new(BACKUP_FILE).exists() { "✓ yes" } else { "✗ no" });
-                ui::section("Addresses");
-                println!("  Receive addresses   {} (m/44'/0'/0'/0/{{i}})", receive_addresses.len());
-                println!("  Change addresses    {} (m/44'/0'/0'/1/{{i}})", change_addresses.len());
-                ui::section("Settings");
-                println!("  Session timeout     {} minutes", cfg.session_timeout_secs / 60);
-                println!("  Audit log           wallet_audit.log");
-                ui::pause();
-            }
-
-            "7" => {
-                ui::header("", &format!("[{}] > Export xpub", fingerprint));
-                match wallet_info::export_watch_wallet(root_key, cfg.network) {
-                    Ok(()) => {
-                        ui::success("Exported to watch_wallet.txt");
-                        ui::info("This file is SAFE to copy to a hot machine — it cannot spend.");
-                        audit.log("XPUB_EXPORTED");
-                    }
-                    Err(e) => ui::error(&e),
-                }
-                ui::pause();
-            }
-
-            "8" => {
-                ui::header("", &format!("[{}] > Export Descriptor", fingerprint));
-                match wallet_info::export_descriptor(root_key, cfg.network) {
-                    Ok(()) => {
-                        ui::success("Descriptor exported to wallet_descriptor.txt");
-                        ui::info("Import into Electrum or Sparrow to track balances.");
-                        audit.log("DESCRIPTOR_EXPORTED");
-                    }
-                    Err(e) => ui::error(&e),
-                }
-                ui::pause();
-            }
-
-            "9" => {
-                ui::header("", &format!("[{}] > Recovery Phrase", fingerprint));
-                ui::warn("Make sure nobody can see your screen before continuing.");
-                let confirm = ui::prompt("Show recovery phrase? [yes/no]", "Type 'yes' to reveal.");
-                if confirm == "yes" {
-                    println!();
-                    let words: Vec<&str> = mnemonic_str.split_whitespace().collect();
-                    for (i, word) in words.iter().enumerate() {
-                        print!("  {}{:>2}.{} {:<12}", ui::DIM, i + 1, ui::RESET, word);
-                        if (i + 1) % 4 == 0 { println!(); }
-                    }
-                    println!("\n");
-                    audit.log("MNEMONIC_VIEWED");
-                } else {
-                    ui::info("Cancelled.");
-                }
-                ui::pause();
-            }
-
-            "10" => {
-                verify_backup_menu();
-            }
-
-            "11" => {
-                audit.log("SESSION_END");
+            "1"  => session_actions::handle_receive_address(state),
+            "2"  => session_actions::handle_view_all_addresses(state),
+            "3"  => session_actions::handle_sign_transaction(state),
+            "4"  => session_actions::handle_dry_run(state),
+            "5"  => session_actions::handle_import_utxos(state),
+            "6"  => session_actions::handle_wallet_summary(state),
+            "7"  => session_actions::handle_export_xpub(state),
+            "8"  => session_actions::handle_export_descriptor(state),
+            "9"  => session_actions::handle_view_phrase(state),
+            "10" => session_actions::handle_verify_backup(),
+            "11" => session_actions::handle_change_passphrase(state),
+            "12" => {
+                state.audit.log("SESSION_END");
                 ui::info("Wallet locked. All key material cleared from memory.");
                 return;
             }
 
-            _ => ui::error("Invalid choice — enter 1 to 11."),
+            _ => ui::error("Invalid choice — enter 1 to 12."),
         }
     }
 }
 
-// ── Verify backup ─────────────────────────────────────────────────────────────
 
-fn verify_backup_menu() {
-    ui::header("", "Main > Verify Backup");
-    if !Path::new(BACKUP_FILE).exists() {
-        ui::error("No backup file found.");
-        ui::pause();
-        return;
-    }
-    println!("  Enter your passphrase to verify the backup can be decrypted:\n");
-    let pass = match read_password() {
-        Ok(p) => p,
-        Err(e) => { ui::error(&e); ui::pause(); return; }
-    };
-    match load_backup(&pass, BACKUP_FILE) {
-        Ok(mnemonic) => {
-            let word_count = mnemonic.split_whitespace().count();
-            ui::success(&format!("Backup verified! Contains a valid {}-word mnemonic.", word_count));
-        }
-        Err(e) => ui::error(&format!("Backup verification FAILED: {}", e)),
-    }
-    ui::pause();
-}
-
-// ── Settings ──────────────────────────────────────────────────────────────────
 
 fn settings_menu(cfg: &mut Config) {
     loop {
@@ -465,7 +311,7 @@ fn settings_menu(cfg: &mut Config) {
                     "Wallet auto-locks after this many minutes of inactivity.",
                     |s| s.parse::<u64>()
                           .ok()
-                          .filter(|&n| n >= 1 && n <= 60)
+                          .filter(|&n| (1..=60).contains(&n))
                           .ok_or_else(|| "Enter a number between 1 and 60.".to_string())
                 );
                 cfg.session_timeout_secs = mins * 60;
@@ -483,7 +329,7 @@ fn settings_menu(cfg: &mut Config) {
 // ── Passphrase input ──────────────────────────────────────────────────────────
 
 /// Interactive passphrase creation with strength meter and confirmation.
-fn get_passphrase_new() -> String {
+pub fn get_passphrase_new() -> String {
     loop {
         println!("\n  {}Set a passphrase to protect your wallet {}(input hidden){}:",
             ui::BOLD, ui::DIM, ui::RESET);

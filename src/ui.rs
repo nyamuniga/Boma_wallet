@@ -40,7 +40,7 @@ pub fn header(title: &str, breadcrumb: &str) {
     clear();
     let w = 54usize;
     println!("\n  {}{}┌{}┐{}", BOLD, ORANGE, "─".repeat(w), RESET);
-    let t = format!("₿  BOMA Cold Wallet     │  v0.3");
+    let t = "₿  BOMA Cold Wallet     │  v0.3".to_string();
     println!("  {}{}│ {:<w$}│{}", BOLD, ORANGE, t, RESET, w = w - 1);
     if !breadcrumb.is_empty() {
         println!("  {}{}│ {:<w$}│{}", DIM, ORANGE, breadcrumb, RESET, w = w - 1);
@@ -107,4 +107,38 @@ pub fn menu(items: &[(&str, &str)]) {
     for (num, desc) in items {
         println!("  {}{}{}{}  {}", BOLD, ORANGE, num, RESET, desc);
     }
+}
+
+// ── Application-specific formatting ───────────────────────────────────────────
+
+#[allow(clippy::too_many_arguments)]
+pub fn print_transaction_summary(
+    from: &bitcoin::util::address::Address,
+    to: &bitcoin::util::address::Address,
+    send_sats: u64,
+    fee_sats: u64,
+    change_sats: u64,
+    change_address: &bitcoin::util::address::Address,
+    use_rbf: bool,
+    dry_run: bool,
+) {
+    let has_change = change_sats >= 546; // DUST_SATS
+    println!();
+    divider();
+    println!("  {}{}Transaction Summary{}", BOLD, CYAN, RESET);
+    divider();
+    println!("  From:      {}", from);
+    println!("  To:        {}{}{}", GREEN, to, RESET);
+    println!("  Send:      {:.8} BTC  ({} sats)", send_sats as f64/1e8, send_sats);
+    println!("  Fee:       {:.8} BTC  ({} sats)", fee_sats as f64/1e8, fee_sats);
+    if has_change {
+        println!("  Change:    {:.8} BTC  ({} sats)  → {}", change_sats as f64/1e8, change_sats, change_address);
+    } else if change_sats > 0 {
+        println!("  Change:    {} sats  {}(below dust — absorbed into fee){}", change_sats, DIM, RESET);
+    }
+    println!("  RBF:       {}", if use_rbf { "yes — fee can be bumped later" } else { "no" });
+    if dry_run {
+        println!("  {}{}MODE: DRY RUN — will NOT be signed{}", BOLD, YELLOW, RESET);
+    }
+    divider();
 }
