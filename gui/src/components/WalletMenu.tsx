@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { save } from "@tauri-apps/plugin-dialog";
-import { DashboardData, Utxo } from "../types";
+import { DashboardData } from "../types";
 import { ToastType } from "../hooks/useToast";
 
 interface Props {
@@ -45,23 +45,23 @@ export default function WalletMenu({ dashboard, passphrase, onNavigate, onLock, 
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-8">
           <MenuSection title="Receive" items={[
-            { id: "menu-receive",       label: "1. Show receive address + QR", onClick: () => onNavigate("receive") },
-            { id: "menu-all-addresses", label: "2. View all addresses",         onClick: () => onNavigate("all_addresses") },
+            { id: "menu-receive", label: "1. Show receive address + QR", onClick: () => onNavigate("receive") },
+            { id: "menu-all-addresses", label: "2. View all addresses", onClick: () => onNavigate("all_addresses") },
           ]} />
 
           <MenuSection title="Send" items={[
-            { id: "menu-sign-tx",       label: "3. Sign transaction (offline)",  onClick: () => onNavigate("sign_tx") },
-            { id: "menu-dry-run",       label: "4. Dry run — preview transaction", onClick: () => onNavigate("dry_run") },
-            { id: "menu-import-utxos",  label: "5. Import UTXOs from CSV",       onClick: () => onNavigate("import_utxos") },
+            { id: "menu-sign-tx", label: "3. Sign transaction (offline)", onClick: () => onNavigate("sign_tx") },
+            { id: "menu-dry-run", label: "4. Dry run — preview transaction", onClick: () => onNavigate("dry_run") },
+            { id: "menu-import-utxos", label: "5. Import UTXOs from CSV", onClick: () => onNavigate("import_utxos") },
           ]} />
 
           <div className="md:col-span-2">
             <MenuSection title="Wallet" items={[
-              { id: "menu-summary",       label: "6. Wallet summary",           onClick: () => onNavigate("summary") },
-              { id: "menu-export-xpub",   label: "7. Export watch-only xpub",   onClick: handleExportXpub },
-              { id: "menu-export-desc",   label: "8. Export wallet descriptor",  onClick: handleExportDescriptor },
-              { id: "menu-view-phrase",   label: "9. View recovery phrase",      onClick: () => onNavigate("view_phrase") },
-              { id: "menu-change-pass",   label: "10. Change passphrase",        onClick: () => onNavigate("change_pass") },
+              { id: "menu-summary", label: "6. Wallet summary", onClick: () => onNavigate("summary") },
+              { id: "menu-export-xpub", label: "7. Export watch-only xpub", onClick: handleExportXpub },
+              { id: "menu-export-desc", label: "8. Export wallet descriptor", onClick: handleExportDescriptor },
+              { id: "menu-view-phrase", label: "9. View recovery phrase", onClick: () => onNavigate("view_phrase") },
+              { id: "menu-change-pass", label: "10. Change passphrase", onClick: () => onNavigate("change_pass") },
             ]} />
             <button
               id="menu-lock"
