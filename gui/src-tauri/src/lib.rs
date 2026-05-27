@@ -8,6 +8,7 @@ use boma_core::psbt::{parse_psbt, parse_psbt_from_base64, sign_psbt, export_psbt
 use bitcoin::network::constants::Network;
 use serde::Serialize;
 use std::path::Path;
+use zeroize::Zeroize;
 
 #[derive(Serialize)]
 pub struct WalletData {
@@ -26,11 +27,13 @@ fn create_wallet(passphrase: &str) -> Result<WalletData, String> {
     let mnemonic = generate_mnemonic(&entropy);
     let mnemonic_str = mnemonic.to_string();
     
-    let seed = derive_seed_from_mnemonic(&mnemonic_str, passphrase);
+    let mut seed = derive_seed_from_mnemonic(&mnemonic_str, passphrase);
     let root_key = derive_keys(&seed, Network::Bitcoin).map_err(|e| e.to_string())?.0;
     let fingerprint = boma_core::wallet_info::get_fingerprint(&root_key);
     
     store_backup(passphrase, &mnemonic_str, "backup.txt").map_err(|e| e.to_string())?;
+    
+    seed.zeroize();
     
     Ok(WalletData { mnemonic: mnemonic_str, fingerprint })
 }
@@ -48,11 +51,13 @@ fn restore_wallet(mnemonic: &str, passphrase: &str) -> Result<DashboardData, Str
     // Guard: warn but allow overwrite (GUI handles confirmation before calling)
     store_backup(passphrase, &mnemonic_str, "backup.txt").map_err(|e| e.to_string())?;
 
-    let seed = derive_seed_from_mnemonic(&mnemonic_str, passphrase);
+    let mut seed = derive_seed_from_mnemonic(&mnemonic_str, passphrase);
     let root_key = derive_keys(&seed, Network::Bitcoin).map_err(|e| e.to_string())?.0;
     let fingerprint = boma_core::wallet_info::get_fingerprint(&root_key);
     let addresses = generate_many_addresses(&root_key, Network::Bitcoin);
     let receive_addresses = addresses.into_iter().map(|(addr, _)| addr.to_string()).collect();
+
+    seed.zeroize();
 
     Ok(DashboardData { fingerprint, receive_addresses })
 }
@@ -66,8 +71,8 @@ pub struct DashboardData {
 
 #[tauri::command]
 fn login(passphrase: &str) -> Result<DashboardData, String> {
-    let mnemonic_str = load_backup(passphrase, "backup.txt").map_err(|e| e.to_string())?;
-    let seed = derive_seed_from_mnemonic(&mnemonic_str, passphrase);
+    let mut mnemonic_str = load_backup(passphrase, "backup.txt").map_err(|e| e.to_string())?;
+    let mut seed = derive_seed_from_mnemonic(&mnemonic_str, passphrase);
     let root_key = derive_keys(&seed, Network::Bitcoin).map_err(|e| e.to_string())?.0;
     
     let fingerprint = boma_core::wallet_info::get_fingerprint(&root_key);
@@ -75,22 +80,29 @@ fn login(passphrase: &str) -> Result<DashboardData, String> {
     
     let receive_addresses = addresses.into_iter().map(|(addr, _)| addr.to_string()).collect();
     
+    mnemonic_str.zeroize();
+    seed.zeroize();
+
     Ok(DashboardData { fingerprint, receive_addresses })
 }
 
 #[tauri::command]
 fn export_xpub(passphrase: &str, save_path: &str) -> Result<(), String> {
-    let mnemonic_str = load_backup(passphrase, "backup.txt").map_err(|e| e.to_string())?;
-    let seed = derive_seed_from_mnemonic(&mnemonic_str, passphrase);
+    let mut mnemonic_str = load_backup(passphrase, "backup.txt").map_err(|e| e.to_string())?;
+    let mut seed = derive_seed_from_mnemonic(&mnemonic_str, passphrase);
     let root_key = derive_keys(&seed, Network::Bitcoin).map_err(|e| e.to_string())?.0;
+    mnemonic_str.zeroize();
+    seed.zeroize();
     boma_core::wallet_info::export_watch_wallet(&root_key, Network::Bitcoin, save_path)
 }
 
 #[tauri::command]
 fn export_descriptor(passphrase: &str, save_path: &str) -> Result<(), String> {
-    let mnemonic_str = load_backup(passphrase, "backup.txt").map_err(|e| e.to_string())?;
-    let seed = derive_seed_from_mnemonic(&mnemonic_str, passphrase);
+    let mut mnemonic_str = load_backup(passphrase, "backup.txt").map_err(|e| e.to_string())?;
+    let mut seed = derive_seed_from_mnemonic(&mnemonic_str, passphrase);
     let root_key = derive_keys(&seed, Network::Bitcoin).map_err(|e| e.to_string())?.0;
+    mnemonic_str.zeroize();
+    seed.zeroize();
     boma_core::wallet_info::export_descriptor(&root_key, Network::Bitcoin, save_path)
 }
 
@@ -127,10 +139,13 @@ fn build_transaction(
     use std::str::FromStr;
     use boma_core::transaction::{TxParams, build_transaction as build_tx};
     
-    let mnemonic_str = load_backup(passphrase, "backup.txt").map_err(|e| e.to_string())?;
-    let seed = derive_seed_from_mnemonic(&mnemonic_str, passphrase);
+    let mut mnemonic_str = load_backup(passphrase, "backup.txt").map_err(|e| e.to_string())?;
+    let mut seed = derive_seed_from_mnemonic(&mnemonic_str, passphrase);
     let root_key = derive_keys(&seed, Network::Bitcoin).map_err(|e| e.to_string())?.0;
     
+    mnemonic_str.zeroize();
+    seed.zeroize();
+
     let receive_addresses = generate_many_addresses(&root_key, Network::Bitcoin);
     let change_addresses = boma_core::change_addresses::generate_change_addresses(&root_key, Network::Bitcoin);
     
@@ -178,9 +193,12 @@ fn sign_and_export_psbt(
     output_path: Option<&str>,
 ) -> Result<String, String> {
     let cfg = boma_core::config::Config::load();
-    let mnemonic_str = load_backup(passphrase, "backup.txt").map_err(|e| e.to_string())?;
-    let seed = derive_seed_from_mnemonic(&mnemonic_str, passphrase);
+    let mut mnemonic_str = load_backup(passphrase, "backup.txt").map_err(|e| e.to_string())?;
+    let mut seed = derive_seed_from_mnemonic(&mnemonic_str, passphrase);
     let root_key = derive_keys(&seed, cfg.network).map_err(|e| e.to_string())?.0;
+
+    mnemonic_str.zeroize();
+    seed.zeroize();
 
     let (psbt, _) = if is_base64 {
         parse_psbt_from_base64(input_data)?

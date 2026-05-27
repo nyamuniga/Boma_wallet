@@ -5,7 +5,7 @@ use bitcoin::util::bip32::ExtendedPrivKey;
 
 use crate::address_derivation::derive_address_range;
 
-/// Generates 20 change addresses on the BIP-44 internal chain: m/44'/{coin}'/0'/1/{i}.
+/// Generates 20 change addresses on the BIP-84 internal chain: m/84'/{coin}'/0'/1/{i}.
 pub fn generate_change_addresses(
     root_key: &ExtendedPrivKey,
     network: Network,

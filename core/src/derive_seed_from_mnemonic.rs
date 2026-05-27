@@ -1,6 +1,7 @@
 use hmac::Hmac;
 use pbkdf2::pbkdf2;
 use sha2::Sha512;
+use zeroize::{Zeroize, Zeroizing};
 
 /// Derives a 64-byte (512-bit) seed from a BIP-39 mnemonic and optional passphrase.
 ///
@@ -14,12 +15,17 @@ use sha2::Sha512;
 pub fn derive_seed_from_mnemonic(mnemonic: &str, passphrase: &str) -> Vec<u8> {
     let mnemonic_bytes = mnemonic.as_bytes();
 
-    // BIP-39 standard: salt = "mnemonic" + passphrase
-    let salt = format!("mnemonic{}", passphrase);
+    let mut salt = format!("mnemonic{}", passphrase);
     let salt_bytes = salt.as_bytes();
 
-    let mut seed = vec![0u8; 64];
+    // Use Zeroizing vector so it scrubs when dropped or returned and dropped later
+    let mut seed = Zeroizing::new(vec![0u8; 64]);
     pbkdf2::<Hmac<Sha512>>(mnemonic_bytes, salt_bytes, 2048, &mut seed);
 
-    seed
+    salt.zeroize();
+    
+    // We return the raw Vec<u8> so callers don't need zeroize imports, 
+    // but callers must zeroize it after use.
+    let out = seed.to_vec();
+    out
 }

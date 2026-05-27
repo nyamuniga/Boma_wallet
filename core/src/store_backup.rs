@@ -1,12 +1,11 @@
 use aes_gcm::aead::{Aead, KeyInit};
 use aes_gcm::{Aes256Gcm, Nonce};
-use hmac::Hmac;
-use pbkdf2::pbkdf2;
+use argon2::{Argon2, Params};
 use rand::rngs::OsRng;
 use rand::RngCore;
-use sha2::Sha512;
 use std::fs::File;
 use std::io::{Write, BufWriter};
+use zeroize::Zeroize;
 
 /// Encrypts the mnemonic with AES-256-GCM and writes the result to disk.
 ///
@@ -14,7 +13,7 @@ use std::io::{Write, BufWriter};
 ///   - The passphrase is NEVER stored — authentication is via successful decryption.
 ///   - Private keys are NOT stored — they are re-derived from the mnemonic at login.
 ///   - The encryption key is derived from the passphrase + a random 32-byte salt
-///     using PBKDF2-HMAC-SHA512 with 100,000 iterations.
+///     using Argon2id with 64MB memory cost, 3 iterations, and 1 degree of parallelism.
 ///   - Each save generates a fresh random salt and nonce, so the ciphertext
 ///     is different every time even for the same mnemonic.
 ///
@@ -29,9 +28,15 @@ pub fn store_backup(passphrase: &str, mnemonic_str: &str, filename: &str) -> Res
     OsRng.fill_bytes(&mut salt);
     OsRng.fill_bytes(&mut nonce_bytes);
 
-    // Derive a 256-bit AES key from passphrase + salt via PBKDF2-HMAC-SHA512
+    // Derive a 256-bit AES key from passphrase + salt via Argon2id
     let mut key_bytes = [0u8; 32];
-    pbkdf2::<Hmac<Sha512>>(passphrase.as_bytes(), &salt, 100_000, &mut key_bytes);
+    let argon2 = Argon2::new(
+        argon2::Algorithm::Argon2id,
+        argon2::Version::V0x13,
+        Params::new(65536, 3, 1, Some(32)).unwrap(),
+    );
+    argon2.hash_password_into(passphrase.as_bytes(), &salt, &mut key_bytes)
+        .map_err(|e| format!("Argon2 failed: {}", e))?;
 
     // Encrypt the mnemonic; the 16-byte GCM auth tag is appended to ciphertext
     let cipher = Aes256Gcm::new_from_slice(&key_bytes)
@@ -40,6 +45,8 @@ pub fn store_backup(passphrase: &str, mnemonic_str: &str, filename: &str) -> Res
     let ciphertext = cipher
         .encrypt(nonce, mnemonic_str.as_bytes())
         .map_err(|e| format!("Encryption failed: {}", e))?;
+
+    key_bytes.zeroize();
 
     // Write only the encrypted blob — no plaintext secrets on disk
     let file = File::create(filename)
@@ -84,9 +91,14 @@ pub fn load_backup(passphrase: &str, filename: &str) -> Result<String, String> {
     let ciphertext = hex::decode(data_hex.ok_or("Corrupted backup: missing DATA")?)
         .map_err(|_| "Corrupted backup: invalid DATA encoding".to_string())?;
 
-    // Derive the same key from passphrase + salt
     let mut key_bytes = [0u8; 32];
-    pbkdf2::<Hmac<Sha512>>(passphrase.as_bytes(), &salt, 100_000, &mut key_bytes);
+    let argon2 = Argon2::new(
+        argon2::Algorithm::Argon2id,
+        argon2::Version::V0x13,
+        Params::new(65536, 3, 1, Some(32)).unwrap(),
+    );
+    argon2.hash_password_into(passphrase.as_bytes(), &salt, &mut key_bytes)
+        .map_err(|_| "Argon2 failed.".to_string())?;
 
     let cipher = Aes256Gcm::new_from_slice(&key_bytes)
         .map_err(|_| "Cipher init failed.".to_string())?;
@@ -96,6 +108,8 @@ pub fn load_backup(passphrase: &str, filename: &str) -> Result<String, String> {
     let plaintext = cipher
         .decrypt(nonce, ciphertext.as_ref())
         .map_err(|_| "Incorrect passphrase or corrupted backup.".to_string())?;
+
+    key_bytes.zeroize();
 
     String::from_utf8(plaintext).map_err(|_| "Corrupted backup: invalid UTF-8.".to_string())
 }
