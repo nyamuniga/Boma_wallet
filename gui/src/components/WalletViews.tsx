@@ -6,17 +6,34 @@ import { ToastType } from "../hooks/useToast";
 
 // ── Receive View ──────────────────────────────────────────────────────────
 
-export function ReceiveView({ address }: { address: string }) {
+export function ReceiveView({ addresses }: { addresses: string[] }) {
+  const [index, setIndex] = useState(0);
+
+  const handleNext = () => {
+    setIndex((prev) => (prev + 1) % addresses.length);
+  };
+
+  const address = addresses[index];
+
   return (
     <div>
-      <h2 className="text-orange-400 text-lg mb-4">Receive Address</h2>
-      <div className="bg-neutral-900 p-6 rounded border border-neutral-800 mb-4 flex flex-col items-center">
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-orange-400 text-lg">Receive Address</h2>
+        <span className="text-neutral-500 text-xs">Address {index + 1} of {addresses.length}</span>
+      </div>
+      <div className="bg-neutral-900 p-6 rounded border border-neutral-800 mb-4 flex flex-col items-center relative">
         <div className="bg-white p-4 rounded-xl mb-4 shadow-[0_0_15px_rgba(255,255,255,0.15)]">
           <QRCodeSVG value={address} size={200} />
         </div>
-        <div id="receive-address" className="text-center text-sm text-white break-all bg-black p-3 rounded w-full border border-neutral-800 font-mono">
+        <div id="receive-address" className="text-center text-sm text-white break-all bg-black p-3 rounded w-full border border-neutral-800 font-mono mb-4">
           {address}
         </div>
+        <button 
+          onClick={handleNext}
+          className="px-4 py-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-sm rounded transition-colors w-full border border-neutral-700 hover:border-orange-500/50"
+        >
+          Generate New Address
+        </button>
       </div>
     </div>
   );
