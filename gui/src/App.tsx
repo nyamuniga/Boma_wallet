@@ -111,7 +111,7 @@ export default function App() {
             ← Back to Main Menu
           </button>
 
-          {activeView === "receive"      && <ReceiveView address={dashboard.receive_addresses[0]} />}
+          {activeView === "receive"      && <ReceiveView addresses={dashboard.receive_addresses} />}
           {activeView === "all_addresses"&& <AllAddressesView addresses={dashboard.receive_addresses} />}
           {activeView === "summary"      && <WalletSummaryView dashboard={dashboard} />}
           {activeView === "view_phrase"  && <ViewPhrase passphrase={passphrase} showToast={showToast} />}

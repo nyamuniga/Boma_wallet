@@ -148,26 +148,33 @@ pub fn sign_psbt(
                 continue; // Derived key doesn't match recorded pubkey
             }
 
-            // Determine the script to sign against
-            let script = psbt_input.witness_utxo.as_ref()
-                .map(|u| u.script_pubkey.clone())
-                .or_else(|| {
-                    psbt_input.non_witness_utxo.as_ref().and_then(|prev_tx| {
-                        let vout = psbt.unsigned_tx.input[input_idx].previous_output.vout as usize;
-                        prev_tx.output.get(vout).map(|o| o.script_pubkey.clone())
-                    })
-                })
-                .ok_or_else(|| format!("No script found for input {}", input_idx))?;
+            // Determine if input is SegWit and extract value & script
+            let (script, is_segwit, value) = if let Some(u) = &psbt_input.witness_utxo {
+                (u.script_pubkey.clone(), true, u.value)
+            } else if let Some(prev_tx) = &psbt_input.non_witness_utxo {
+                let vout = psbt.unsigned_tx.input[input_idx].previous_output.vout as usize;
+                let out = prev_tx.output.get(vout)
+                    .ok_or_else(|| format!("Invalid vout for input {}", input_idx))?;
+                (out.script_pubkey.clone(), false, out.value)
+            } else {
+                return Err(format!("No UTXO found for input {}", input_idx));
+            };
 
-            // Sign using legacy P2PKH sighash
             use bitcoin::util::sighash::SighashCache;
             use bitcoin::{EcdsaSighashType, EcdsaSig};
 
             let sighash = {
-                let cache = SighashCache::new(&psbt.unsigned_tx);
-                cache
-                    .legacy_signature_hash(input_idx, &script, EcdsaSighashType::All as u32)
-                    .map_err(|e| format!("Sighash error on input {}: {}", input_idx, e))?
+                let mut cache = SighashCache::new(&psbt.unsigned_tx);
+                if is_segwit {
+                    // For P2WPKH, the scriptCode is the P2PKH script for the pubkey
+                    let pub_key_obj = bitcoin::PublicKey::new(child_pubkey);
+                    let script_code = bitcoin::util::address::Address::p2pkh(&pub_key_obj, _network).script_pubkey();
+                    cache.segwit_signature_hash(input_idx, &script_code, value, EcdsaSighashType::All)
+                        .map_err(|e| format!("SegWit sighash error on input {}: {}", input_idx, e))?
+                } else {
+                    cache.legacy_signature_hash(input_idx, &script, EcdsaSighashType::All as u32)
+                        .map_err(|e| format!("Legacy sighash error on input {}: {}", input_idx, e))?
+                }
             };
 
             let msg = bitcoin::secp256k1::Message::from_slice(sighash.as_ref())
