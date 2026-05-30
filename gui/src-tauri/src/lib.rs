@@ -243,17 +243,17 @@ fn update_settings(network: &str, session_timeout_secs: u64) -> Result<(), Strin
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    // macOS App bundles are read-only. We change the CWD to ~/.boma
-    // so that backup.txt and wallet_config.txt write to a persistent, writable location.
-    if let Some(mut path) = dirs::home_dir() {
-        path.push(".boma");
-        let _ = std::fs::create_dir_all(&path);
-        let _ = std::env::set_current_dir(&path);
-    }
-
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .setup(|app| {
+            use tauri::Manager;
+            if let Ok(app_dir) = app.path().app_data_dir() {
+                let _ = std::fs::create_dir_all(&app_dir);
+                let _ = std::env::set_current_dir(&app_dir);
+            }
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             check_wallet_exists,
             create_wallet,
