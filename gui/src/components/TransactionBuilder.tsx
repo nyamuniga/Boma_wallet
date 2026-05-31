@@ -189,9 +189,9 @@ function Step5Amounts({ sendBtc, feeSats, onSendChange, onFeeChange, error, dryR
   return (
     <div className="space-y-4">
       <div className="bg-neutral-900 border border-neutral-800 rounded p-4 space-y-2 text-xs font-mono text-neutral-400 mb-2">
-        <div><span className="text-neutral-600 w-20 inline-block">From:</span> {fromAddress.slice(0, 24)}…</div>
-        <div><span className="text-neutral-600 w-20 inline-block">To:</span> {toAddress}</div>
-        <div><span className="text-neutral-600 w-20 inline-block">RBF:</span> {useRbf ? "Yes" : "No"}</div>
+        <div><span className="text-neutral-600 w-16 inline-block">From:</span> <span className="break-all">{fromAddress.slice(0, 24)}…</span></div>
+        <div><span className="text-neutral-600 w-16 inline-block">To:</span> <span className="break-all">{toAddress}</span></div>
+        <div><span className="text-neutral-600 w-16 inline-block">RBF:</span> {useRbf ? "Yes" : "No"}</div>
       </div>
 
       <div>
@@ -207,7 +207,7 @@ function Step5Amounts({ sendBtc, feeSats, onSendChange, onFeeChange, error, dryR
 
       {error && <div className="text-red-400 text-sm p-3 bg-red-950/30 border border-red-500/30 rounded">{error}</div>}
 
-      <div className="flex gap-4 pt-2">
+      <div className="flex flex-col sm:flex-row gap-3 pt-2">
         <button onClick={onBack} className="px-6 py-2 bg-neutral-800 text-white rounded hover:bg-neutral-700 transition-all">Back</button>
         <button id="tx-build-btn" onClick={onBuild} disabled={!sendBtc || !feeSats}
           className="flex-1 py-2 bg-orange-600 text-white rounded hover:bg-orange-500 transition-all font-bold shadow-[0_0_15px_rgba(165,81,48,0.4)] disabled:opacity-50">
@@ -244,13 +244,13 @@ function NavButtons({ onBack, onNext, nextDisabled = false }: {
   onBack?: () => void; onNext?: () => void; nextDisabled?: boolean;
 }) {
   return (
-    <div className="flex gap-4 pt-2">
+    <div className="flex flex-col sm:flex-row gap-3 pt-2">
       {onBack && (
         <button onClick={onBack} className="px-6 py-2 bg-neutral-800 text-white rounded hover:bg-neutral-700 transition-all">Back</button>
       )}
       {onNext && (
         <button onClick={onNext} disabled={nextDisabled}
-          className="px-6 py-2 bg-orange-600 text-white rounded hover:bg-orange-500 transition-all disabled:opacity-50">
+          className="flex-1 px-6 py-2 bg-orange-600 text-white rounded hover:bg-orange-500 transition-all disabled:opacity-50">
           Next
         </button>
       )}

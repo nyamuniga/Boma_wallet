@@ -3,6 +3,18 @@ use crate::ui;
 /// Strength tier for a passphrase.
 pub enum Tier { VeryWeak, Weak, Fair, Strong, VeryStrong }
 
+/// Minimum score (inclusive) that a non-empty passphrase must reach.
+/// Score 4 corresponds to the `Fair` tier.
+pub const MIN_SCORE: u8 = 4;
+pub const MIN_LABEL: &str = "Fair";
+
+/// Returns `true` when the passphrase meets the minimum strength requirement.
+/// Empty passphrases are rejected before this function is reached.
+pub fn is_strong_enough(passphrase: &str) -> bool {
+    let (_, s, _) = score(passphrase);
+    s >= MIN_SCORE
+}
+
 /// Scores a passphrase 0–7 and returns its tier and advice.
 pub fn score(passphrase: &str) -> (Tier, u8, &'static str) {
     let mut s: u8 = 0;

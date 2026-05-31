@@ -36,14 +36,14 @@ export default function WalletMenu({ dashboard, passphrase, onNavigate, onLock, 
   };
 
   return (
-    <div className="min-h-screen bg-black p-8 font-mono">
-      <div className="max-w-3xl mx-auto border border-neutral-800 bg-neutral-950 p-8 rounded">
-        <div className="mb-8 border-b border-orange-500/30 pb-4 flex justify-between items-center">
+    <div className="min-h-screen bg-black p-4 sm:p-8 font-mono flex items-center justify-center">
+      <div className="w-full max-w-3xl border border-neutral-800 bg-neutral-950 p-4 sm:p-8 rounded">
+        <div className="mb-8 border-b border-orange-500/30 pb-4 flex flex-wrap justify-between items-center gap-2">
           <h1 className="text-xl text-orange-400 uppercase tracking-widest">Wallet Menu</h1>
-          <span className="text-neutral-500 text-sm">[{dashboard.fingerprint}]</span>
+          <span className="text-neutral-500 text-xs font-mono truncate max-w-[180px] sm:max-w-none">[{dashboard.fingerprint}]</span>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-8">
           <MenuSection title="Receive" items={[
             { id: "menu-receive", label: "1. Show receive address + QR", onClick: () => onNavigate("receive") },
             { id: "menu-all-addresses", label: "2. View all addresses", onClick: () => onNavigate("all_addresses") },
