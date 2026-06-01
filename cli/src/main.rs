@@ -317,26 +317,43 @@ fn settings_menu(cfg: &mut Config) {
 // ── Passphrase input ──────────────────────────────────────────────────────────
 
 /// Interactive passphrase creation with strength meter and confirmation.
+///
+/// Rules enforced:
+///   - A passphrase is MANDATORY — an empty entry is rejected outright.
+///   - The passphrase must score at least `passphrase_check::MIN_SCORE`
+///     (Fair or above) before the wallet creation can proceed.
 pub fn get_passphrase_new() -> String {
     loop {
         println!("\n  {}Set a passphrase to protect your wallet {}(input hidden){}:",
             ui::BOLD, ui::DIM, ui::RESET);
-        ui::info("Press Enter to skip (not recommended — mnemonic alone protects funds).");
+        ui::info(&format!(
+            "A passphrase is required. Minimum strength: {} ({}/{} points).",
+            passphrase_check::MIN_LABEL, passphrase_check::MIN_SCORE, 7
+        ));
 
         let pass = match read_password() {
             Ok(p) => p,
             Err(e) => { ui::error(&e); continue; }
         };
 
+        // Passphrase is mandatory
+        if pass.is_empty() {
+            ui::error("A passphrase is required. You cannot create a wallet without one.");
+            continue;
+        }
+
         // Show strength meter
         println!();
         passphrase_check::display(&pass);
         println!();
 
-        if pass.is_empty() {
-            let ans = ui::prompt("Continue without a passphrase? [yes/no]",
-                "Type 'yes' to use no passphrase (mnemonic alone will secure the wallet).");
-            if ans.eq_ignore_ascii_case("yes") { return pass; }
+        // Enforce minimum strength
+        if !passphrase_check::is_strong_enough(&pass) {
+            ui::error(&format!(
+                "Passphrase is too weak. It must reach at least '{}' ({}/{} points).",
+                passphrase_check::MIN_LABEL, passphrase_check::MIN_SCORE, 7
+            ));
+            ui::info("Tips: use 12+ characters, mix uppercase, digits, and symbols.");
             continue;
         }
 

@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Boma",
-  "version": "0.1.2",
-  "identifier": "com.boma.wallet2",
+  "version": "0.1.4",
+  "identifier": "com.boma.wallet",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",

@@ -3,6 +3,56 @@ import { invoke } from "@tauri-apps/api/core";
 import { WalletData, DashboardData, AuthView } from "../types";
 import { ToastType } from "../hooks/useToast";
 
+// ── Passphrase strength helpers ───────────────────────────────────────────
+// Mirrors the scoring logic in cli/src/passphrase_check.rs.
+
+const MIN_SCORE = 4; // "Fair" — same as passphrase_check::MIN_SCORE
+const MAX_SCORE = 7;
+
+function scorePassphrase(p: string): { score: number; label: string; color: string } {
+  let s = 0;
+  const n = p.length;
+  if (n >= 8)  s++;
+  if (n >= 12) s++;
+  if (n >= 16) s++;
+  if (/[A-Z]/.test(p))                              s++;
+  if (/[0-9]/.test(p))                              s++;
+  if (/[!@#$%^&*()\-_=+[\]{}|;:',.<>/?`~]/.test(p)) s++;
+  if ([...p].some(c => c.codePointAt(0)! > 127))   s++;
+
+  if (s <= 1) return { score: s, label: "Very Weak",  color: "#ef4444" };
+  if (s <= 3) return { score: s, label: "Weak",        color: "#f59e0b" };
+  if (s === 4) return { score: s, label: "Fair",        color: "#eab308" };
+  if (s <= 6) return { score: s, label: "Strong",      color: "#22c55e" };
+  return       { score: s, label: "Excellent",     color: "#10b981" };
+}
+
+function StrengthMeter({ passphrase }: { passphrase: string }) {
+  if (!passphrase) return null;
+  const { score, label, color } = scorePassphrase(passphrase);
+  const pct = Math.round((score / MAX_SCORE) * 100);
+  const tooWeak = score < MIN_SCORE;
+  return (
+    <div className="mt-3 space-y-1">
+      <div className="w-full bg-neutral-800 rounded-full h-1.5 overflow-hidden">
+        <div
+          className="h-full rounded-full transition-all duration-300"
+          style={{ width: `${pct}%`, backgroundColor: color }}
+        />
+      </div>
+      <div className="flex justify-between items-center">
+        <span className="text-xs font-mono" style={{ color }}>{label}</span>
+        <span className="text-xs text-neutral-600">{score}/{MAX_SCORE}</span>
+      </div>
+      {tooWeak && (
+        <p className="text-xs text-amber-400 mt-1">
+          Needs to reach <span className="font-bold">Fair</span> (4 pts). Add length, uppercase, digits, or symbols.
+        </p>
+      )}
+    </div>
+  );
+}
+
 interface Props {
   onLogin: (data: DashboardData, passphrase: string) => void;
   showToast: (msg: string, type?: ToastType) => void;
@@ -134,8 +184,20 @@ function PassphraseForm({
   error: string;
   loading: boolean;
 }) {
-  const label    = view === "create" ? "Create Passphrase" : "Enter Passphrase";
-  const btnLabel = loading ? "Processing..." : view === "create" ? "Create Wallet" : view === "verify" ? "Verify Backup" : "Unlock Wallet";
+  const isCreate  = view === "create";
+  const label     = isCreate ? "Create Passphrase" : "Enter Passphrase";
+  const btnLabel  = loading ? "Processing..." : isCreate ? "Create Wallet" : view === "verify" ? "Verify Backup" : "Unlock Wallet";
+
+  // On the create screen: block if passphrase is empty OR too weak.
+  const isEmpty  = isCreate && passphrase.length === 0;
+  const tooWeak  = isCreate && passphrase.length > 0 && scorePassphrase(passphrase).score < MIN_SCORE;
+  const disabled = loading || isEmpty || tooWeak;
+
+  const disabledTitle = isEmpty
+    ? "A passphrase is required — you cannot create a wallet without one."
+    : tooWeak
+    ? `Passphrase must reach at least "Fair" strength (${MIN_SCORE}/${MAX_SCORE} pts)`
+    : undefined;
 
   return (
     <form onSubmit={onSubmit} className="space-y-6">
@@ -153,6 +215,12 @@ function PassphraseForm({
           placeholder="••••••••••••"
           autoFocus
         />
+        {isCreate && <StrengthMeter passphrase={passphrase} />}
+        {isCreate && isEmpty && (
+          <p className="text-xs text-red-400 mt-2">
+            A passphrase is required to create a wallet.
+          </p>
+        )}
       </div>
       {error && (
         <div className="text-red-400 text-sm p-3 bg-red-950/30 border border-red-500/30 rounded">{error}</div>
@@ -160,8 +228,9 @@ function PassphraseForm({
       <button
         id="auth-submit"
         type="submit"
-        disabled={loading}
-        className="w-full py-3 bg-gradient-to-r from-orange-600 to-orange-500 text-white rounded-lg hover:from-orange-500 hover:to-orange-400 transition-all uppercase tracking-widest text-sm font-bold shadow-[0_0_15px_rgba(165,81,48,0.4)] disabled:opacity-50"
+        disabled={disabled}
+        title={disabledTitle}
+        className="w-full py-3 bg-gradient-to-r from-orange-600 to-orange-500 text-white rounded-lg hover:from-orange-500 hover:to-orange-400 transition-all uppercase tracking-widest text-sm font-bold shadow-[0_0_15px_rgba(165,81,48,0.4)] disabled:opacity-50 disabled:cursor-not-allowed"
       >
         {btnLabel}
       </button>
@@ -181,7 +250,7 @@ function MnemonicDisplay({ wallet, onDone }: { wallet: WalletData; onDone: () =>
           Write down these 24 words. Never type them on an internet-connected device.
         </p>
       </div>
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
         {wallet.mnemonic.split(" ").map((word, i) => (
           <div key={i} className="bg-neutral-900 border border-neutral-800 px-2 py-1 rounded text-xs font-mono text-center flex justify-between">
             <span className="text-neutral-600">{i + 1}.</span>
@@ -292,14 +361,18 @@ function RestoreForm({ onBack, onLogin, showToast }: { onBack: () => void; onLog
           className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 transition-all placeholder-neutral-700 font-mono"
           placeholder="••••••••••••"
         />
+        <StrengthMeter passphrase={passphrase} />
       </div>
       {error && (
         <div className="text-red-400 text-sm p-3 bg-red-950/30 border border-red-500/30 rounded">{error}</div>
       )}
       <button
         type="submit"
-        disabled={loading || !mnemonic.trim()}
-        className="w-full py-3 bg-gradient-to-r from-orange-600 to-orange-500 text-white rounded-lg hover:from-orange-500 hover:to-orange-400 transition-all uppercase tracking-widest text-sm font-bold shadow-[0_0_15px_rgba(165,81,48,0.4)] disabled:opacity-50"
+        disabled={loading || !mnemonic.trim() || (passphrase.length > 0 && scorePassphrase(passphrase).score < MIN_SCORE)}
+        title={passphrase.length > 0 && scorePassphrase(passphrase).score < MIN_SCORE
+          ? `Passphrase must reach at least "Fair" strength (${MIN_SCORE}/${MAX_SCORE} pts)`
+          : undefined}
+        className="w-full py-3 bg-gradient-to-r from-orange-600 to-orange-500 text-white rounded-lg hover:from-orange-500 hover:to-orange-400 transition-all uppercase tracking-widest text-sm font-bold shadow-[0_0_15px_rgba(165,81,48,0.4)] disabled:opacity-50 disabled:cursor-not-allowed"
       >
         {loading ? "Restoring..." : "Restore Wallet"}
       </button>

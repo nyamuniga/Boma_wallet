@@ -141,7 +141,7 @@ export default function PsbtSigner({ passphrase, isBase64, showToast, onDone }: 
           </div>
         )}
 
-        <div className="flex gap-4">
+        <div className="flex flex-col sm:flex-row gap-3">
           <button
             onClick={() => setStep(1)}
             className="px-6 py-2 bg-neutral-800 text-white rounded hover:bg-neutral-700 transition-all"

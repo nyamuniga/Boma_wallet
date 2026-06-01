@@ -101,8 +101,8 @@ export default function App() {
   // Sub-view shell with back button
   return (
     <>
-      <div className="min-h-screen bg-black p-8 font-mono text-sm text-neutral-300">
-        <div className="max-w-3xl mx-auto border border-neutral-800 bg-neutral-950 p-8 rounded">
+      <div className="min-h-screen bg-black p-4 sm:p-8 font-mono text-sm text-neutral-300 flex items-center justify-center">
+        <div className="w-full max-w-3xl border border-neutral-800 bg-neutral-950 p-4 sm:p-8 rounded">
           <button
             id="back-to-menu"
             onClick={() => setActiveView("main")}

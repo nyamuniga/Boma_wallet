@@ -17,7 +17,7 @@ export function ReceiveView({ addresses }: { addresses: string[] }) {
 
   return (
     <div>
-      <div className="flex justify-between items-center mb-4">
+      <div className="flex flex-wrap justify-between items-center gap-2 mb-4">
         <h2 className="text-orange-400 text-lg">Receive Address</h2>
         <span className="text-neutral-500 text-xs">Address {index + 1} of {addresses.length}</span>
       </div>
@@ -74,9 +74,9 @@ export function WalletSummaryView({ dashboard }: { dashboard: DashboardData }) {
 
 function SummaryRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex">
-      <span className="text-neutral-500 w-32 shrink-0">{label}:</span>
-      <span className="text-white">{value}</span>
+    <div className="flex flex-wrap gap-x-4 gap-y-1">
+      <span className="text-neutral-500 min-w-[8rem] shrink-0">{label}:</span>
+      <span className="text-white break-all">{value}</span>
     </div>
   );
 }
@@ -114,25 +114,25 @@ export function ViewPhrase({ passphrase, showToast }: { passphrase: string; show
         ) : (
           <div className="bg-neutral-900 p-4 rounded border border-neutral-800 space-y-3">
             <p className="text-neutral-400 text-sm">Enter your <span className="text-white font-bold">passphrase</span> to display your recovery phrase.</p>
-            <div className="flex gap-2">
+            <div className="flex flex-col sm:flex-row gap-2">
               <input
                 id="phrase-confirm-input"
                 type="password"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleReveal()}
-                className="bg-black border border-neutral-800 rounded p-2 text-white outline-none focus:border-orange-500 font-mono"
+                className="flex-1 bg-black border border-neutral-800 rounded p-2 text-white outline-none focus:border-orange-500 font-mono"
                 placeholder="Passphrase"
                 autoFocus
               />
-              <button onClick={handleReveal} className="px-6 py-2 bg-red-600 text-white rounded hover:bg-red-500 transition-all">
+              <button onClick={handleReveal} className="px-6 py-2 bg-red-600 text-white rounded hover:bg-red-500 transition-all whitespace-nowrap">
                 Confirm
               </button>
             </div>
           </div>
         )
       ) : (
-        <div className="grid grid-cols-3 gap-3 bg-neutral-900 p-6 rounded border border-neutral-800">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 bg-neutral-900 p-4 sm:p-6 rounded border border-neutral-800">
           {phrase.split(" ").map((w, i) => (
             <div key={i} className="font-mono text-sm">
               <span className="text-neutral-600 mr-2">{i + 1}.</span>
