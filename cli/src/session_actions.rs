@@ -29,8 +29,8 @@ pub fn handle_receive_address(state: &SessionState) {
 
 pub fn handle_view_all_addresses(state: &SessionState) {
     ui::header("", &format!("[{}] > All Addresses", state.fingerprint));
-    print_addresses("Receive  (m/44'/0'/0'/0/{i})", &state.receive_addresses);
-    print_addresses("Change   (m/44'/0'/0'/1/{i})", &state.change_addresses);
+    print_addresses("Receive  (m/84'/0'/0'/0/{i})", &state.receive_addresses);
+    print_addresses("Change   (m/84'/0'/0'/1/{i})", &state.change_addresses);
     ui::pause();
 }
 
@@ -110,8 +110,9 @@ pub fn handle_wallet_summary(state: &SessionState) {
     println!("  Backup file         backup.txt");
     println!("  Backup exists       {}", if Path::new("backup.txt").exists() { "✓ yes" } else { "✗ no" });
     ui::section("Addresses");
-    println!("  Receive addresses   {} (m/44'/0'/0'/0/{{i}})", state.receive_addresses.len());
-    println!("  Change addresses    {} (m/44'/0'/0'/1/{{i}})", state.change_addresses.len());
+    println!("  Receive addresses   {} (m/84'/0'/0'/0/{{i}})", state.receive_addresses.len());
+    println!("  Change addresses    {} (m/84'/0'/0'/1/{{i}})", state.change_addresses.len());
+
     ui::section("Settings");
     println!("  Session timeout     {} minutes", state.cfg.session_timeout_secs / 60);
     println!("  Audit log           wallet_audit.log");
@@ -135,10 +136,9 @@ pub fn handle_export_descriptor(state: &SessionState) {
     ui::header("", &format!("[{}] > Export Descriptor", state.fingerprint));
     match boma_core::wallet_info::export_descriptor(&state.root_key, state.cfg.network, "wallet_descriptor.txt") {
         Ok(()) => {
-            state.audit.log("EXPORTED_DESCRIPTOR");
+            state.audit.log("DESCRIPTOR_EXPORTED");
             ui::success("Descriptor exported to wallet_descriptor.txt.");
             ui::info("Import into Electrum or Sparrow to track balances.");
-            state.audit.log("DESCRIPTOR_EXPORTED");
         }
         Err(e) => ui::error(&e),
     }

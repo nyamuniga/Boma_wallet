@@ -88,16 +88,15 @@ export function ViewPhrase({ passphrase, showToast }: { passphrase: string; show
   const [confirming, setConfirming] = useState(false);
   const [input, setInput]           = useState("");
 
+  // The backend performs authoritative AES-GCM decryption.
+  // We do not compare client-side so that the backend remains the single source of truth.
   const handleReveal = async () => {
-    if (input !== passphrase) {
-      showToast("Incorrect passphrase.", "error");
-      return;
-    }
     try {
-      const p = await invoke<string>("get_recovery_phrase", { passphrase });
+      const p = await invoke<string>("get_recovery_phrase", { passphrase: input });
       setPhrase(p);
     } catch (e: any) { showToast(String(e), "error"); }
   };
+
 
   return (
     <div>

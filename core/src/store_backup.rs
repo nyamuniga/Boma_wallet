@@ -7,6 +7,14 @@ use std::fs::File;
 use std::io::{Write, BufWriter};
 use zeroize::Zeroize;
 
+// ── Argon2id parameters ────────────────────────────────────────────────────
+// 64 MB memory, 3 iterations, 1-way parallelism, 32-byte output.
+// Adjust only after benchmarking; lowering memory cost weakens brute-force resistance.
+const ARGON2_MEM_KB:   u32   = 65_536; // 64 MiB
+const ARGON2_ITERS:    u32   = 3;
+const ARGON2_PARALLEL: u32   = 1;
+const ARGON2_KEY_LEN:  usize = 32;     // 256-bit AES key
+
 /// Encrypts the mnemonic with AES-256-GCM and writes the result to disk.
 ///
 /// Security properties:
@@ -22,18 +30,20 @@ use zeroize::Zeroize;
 ///   NONCE: <24 hex chars>
 ///   DATA: <hex-encoded AES-256-GCM ciphertext + 16-byte auth tag>
 pub fn store_backup(passphrase: &str, mnemonic_str: &str, filename: &str) -> Result<(), String> {
-    // Random 32-byte salt (for PBKDF2) and 12-byte nonce (for AES-GCM)
+    // Random 32-byte salt (for Argon2id key derivation) and 12-byte nonce (for AES-GCM)
     let mut salt = [0u8; 32];
     let mut nonce_bytes = [0u8; 12];
     OsRng.fill_bytes(&mut salt);
     OsRng.fill_bytes(&mut nonce_bytes);
 
     // Derive a 256-bit AES key from passphrase + salt via Argon2id
-    let mut key_bytes = [0u8; 32];
+    let mut key_bytes = [0u8; ARGON2_KEY_LEN];
+    let params = Params::new(ARGON2_MEM_KB, ARGON2_ITERS, ARGON2_PARALLEL, Some(ARGON2_KEY_LEN))
+        .map_err(|e| format!("Argon2 params error: {}", e))?;
     let argon2 = Argon2::new(
         argon2::Algorithm::Argon2id,
         argon2::Version::V0x13,
-        Params::new(65536, 3, 1, Some(32)).unwrap(),
+        params,
     );
     argon2.hash_password_into(passphrase.as_bytes(), &salt, &mut key_bytes)
         .map_err(|e| format!("Argon2 failed: {}", e))?;
@@ -91,11 +101,13 @@ pub fn load_backup(passphrase: &str, filename: &str) -> Result<String, String> {
     let ciphertext = hex::decode(data_hex.ok_or("Corrupted backup: missing DATA")?)
         .map_err(|_| "Corrupted backup: invalid DATA encoding".to_string())?;
 
-    let mut key_bytes = [0u8; 32];
+    let mut key_bytes = [0u8; ARGON2_KEY_LEN];
+    let params = Params::new(ARGON2_MEM_KB, ARGON2_ITERS, ARGON2_PARALLEL, Some(ARGON2_KEY_LEN))
+        .map_err(|e| format!("Argon2 params error: {}", e))?;
     let argon2 = Argon2::new(
         argon2::Algorithm::Argon2id,
         argon2::Version::V0x13,
-        Params::new(65536, 3, 1, Some(32)).unwrap(),
+        params,
     );
     argon2.hash_password_into(passphrase.as_bytes(), &salt, &mut key_bytes)
         .map_err(|_| "Argon2 failed.".to_string())?;

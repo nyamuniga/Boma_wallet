@@ -3,6 +3,8 @@ use bitcoin::secp256k1::Secp256k1;
 use bitcoin::util::bip32::{DerivationPath, ExtendedPrivKey, ExtendedPubKey};
 use std::io::Write;
 use std::str::FromStr;
+use crate::transaction::coin_type;
+
 
 /// Returns the 4-byte master fingerprint of the wallet as a hex string.
 /// This uniquely identifies the wallet without revealing any private information.
@@ -16,7 +18,8 @@ pub fn get_fingerprint(root_key: &ExtendedPrivKey) -> String {
 /// This xpub can generate all receive and change addresses but CANNOT sign.
 pub fn get_account_xpub(root_key: &ExtendedPrivKey, network: Network) -> Result<String, String> {
     let secp = Secp256k1::new();
-    let coin = if network == Network::Bitcoin { 0 } else { 1 };
+    let coin = coin_type(network);
+
     let path = DerivationPath::from_str(&format!("m/84'/{}'/0'", coin))
         .map_err(|e| e.to_string())?;
     let account_key = root_key

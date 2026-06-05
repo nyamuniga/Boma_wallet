@@ -5,3 +5,10 @@ members = [
     "cli",
     "gui/src-tauri",
 ]
+
+[profile.release]
+opt-level     = 3
+lto           = "thin"      # Link-time optimisation across crate boundaries
+codegen-units = 1            # Single codegen unit enables maximum dead-code elimination
+strip         = "symbols"    # Remove debug symbols from the release binary
+panic         = "abort"      # Abort on panic — removes unwinding machinery that can leak stack data

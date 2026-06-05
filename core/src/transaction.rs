@@ -1,6 +1,7 @@
 use bitcoin::blockdata::script::Builder;
 use bitcoin::blockdata::witness::Witness;
 use bitcoin::consensus::encode::serialize;
+use bitcoin::network::constants::Network;
 use bitcoin::secp256k1::{Message, Secp256k1, SecretKey};
 use bitcoin::util::address::Address;
 use bitcoin::util::sighash::SighashCache;
@@ -9,15 +10,68 @@ use std::str::FromStr;
 
 pub const DUST_SATS: u64 = 546;
 
+/// Returns the BIP-44/84 coin type for the given network.
+/// Used to build derivation paths: m/84'/{coin}'/...
+/// coin = 0 for mainnet, 1 for testnet.
+pub fn coin_type(network: Network) -> u32 {
+    if network == Network::Bitcoin { 0 } else { 1 }
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-/// Parse a BTC-denominated string (e.g. "0.005") to satoshis.
+/// Converts a BTC-denominated string (e.g. "0.00500000") to satoshis using fixed-point
+/// integer arithmetic — no floating-point involved, so there is no IEEE 754 rounding risk.
+///
+/// Accepts up to 8 decimal places. Rejects negative values, empty inputs, and malformed strings.
 pub fn btc_to_sats(s: &str) -> Result<u64, String> {
-    let v: f64 = s.trim().parse()
-        .map_err(|_| format!("'{}' is not a valid number — use format like 0.005", s.trim()))?;
-    if v < 0.0 { return Err("Amount cannot be negative.".to_string()); }
-    Ok((v * 100_000_000.0).round() as u64)
+    let s = s.trim();
+    let err = || format!("'{}' is not a valid BTC amount — use format like 0.00500000", s);
+
+    if s.is_empty() {
+        return Err("Amount cannot be empty.".to_string());
+    }
+    if s.starts_with('-') {
+        return Err("Amount cannot be negative.".to_string());
+    }
+
+    // Split on the decimal point (optional)
+    let (int_str, frac_str) = match s.find('.') {
+        Some(pos) => (&s[..pos], &s[pos + 1..]),
+        None      => (s, ""),
+    };
+
+    // Validate: only ASCII digits allowed
+    if !int_str.chars().all(|c| c.is_ascii_digit()) {
+        return Err(err());
+    }
+    if !frac_str.chars().all(|c| c.is_ascii_digit()) {
+        return Err(err());
+    }
+    if frac_str.len() > 8 {
+        return Err("Too many decimal places — Bitcoin has at most 8.".to_string());
+    }
+
+    // Integer BTC portion → satoshis (multiply by 10^8)
+    let int_val: u64 = if int_str.is_empty() {
+        0
+    } else {
+        int_str.parse::<u64>().map_err(|_| err())?
+    };
+    let int_sats = int_val
+        .checked_mul(100_000_000)
+        .ok_or_else(|| "Amount too large.".to_string())?;
+
+    // Fractional portion: right-pad with zeros to exactly 8 digits, then parse
+    let mut frac_padded = frac_str.to_string();
+    while frac_padded.len() < 8 {
+        frac_padded.push('0');
+    }
+    let frac_sats: u64 = frac_padded.parse().map_err(|_| err())?;
+
+    int_sats.checked_add(frac_sats)
+        .ok_or_else(|| "Amount too large.".to_string())
 }
+
 
 /// Estimate Native SegWit (P2WPKH) transaction size in virtual bytes.
 /// Formula: 10.5 (header) + 68×inputs + 31×outputs

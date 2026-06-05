@@ -79,8 +79,12 @@ fn create_new_wallet(cfg: &Config, audit: &AuditLog) {
 
     // Generate entropy and mnemonic
     let entropy = generate_entropy();
-    let mnemonic = generate_mnemonic(&entropy);
+    let mnemonic = match generate_mnemonic(&entropy) {
+        Ok(m) => m,
+        Err(e) => { ui::error(&format!("Failed to generate mnemonic: {}", e)); ui::pause(); return; }
+    };
     let mnemonic_str = mnemonic.to_string();
+
 
     // Display mnemonic
     ui::header("", "Main > Create New Wallet > Recovery Phrase");

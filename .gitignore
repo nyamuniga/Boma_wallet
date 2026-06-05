@@ -1,5 +1,13 @@
 /target
-backup.txt
-CLEAN_CODE_AUDIT.md
 gui/src-tauri/binaries
 gui/src-tauri/target
+
+# Wallet runtime files — these are user-specific and must never be committed
+backup.txt
+wallet_config.txt
+watch_wallet.txt
+wallet_descriptor.txt
+wallet_audit.log
+codebase_audit.md
+# macOS metadata
+.DS_Store

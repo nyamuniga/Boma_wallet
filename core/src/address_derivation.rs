@@ -4,6 +4,8 @@ use bitcoin::util::address::Address;
 use bitcoin::util::bip32::{DerivationPath, ExtendedPrivKey};
 use bitcoin::PublicKey;
 use std::str::FromStr;
+use crate::transaction::coin_type;
+
 
 /// Shared helper to derive a sequence of addresses on a specific BIP-84 chain.
 ///
@@ -15,7 +17,8 @@ pub fn derive_address_range(
     count: u32,
 ) -> Vec<(Address, SecretKey)> {
     let secp = Secp256k1::new();
-    let coin = if network == Network::Bitcoin { 0 } else { 1 };
+    let coin = coin_type(network);
+
     let mut addresses = Vec::new();
 
     for i in 0..count {
