@@ -83,7 +83,7 @@ function SummaryRow({ label, value }: { label: string; value: string }) {
 
 // ── View Phrase ───────────────────────────────────────────────────────────
 
-export function ViewPhrase({ passphrase, showToast }: { passphrase: string; showToast: (m: string, t?: ToastType) => void }) {
+export function ViewPhrase({ passphrase: _passphrase, showToast }: { passphrase: string; showToast: (m: string, t?: ToastType) => void }) {
   const [phrase, setPhrase]         = useState("");
   const [confirming, setConfirming] = useState(false);
   const [input, setInput]           = useState("");
@@ -220,9 +220,11 @@ export function ImportUtxosView({
     setLoading(true);
     try {
       const { open } = await import("@tauri-apps/plugin-dialog");
+      const { readTextFile } = await import("@tauri-apps/plugin-fs");
       const filePath = await open({ filters: [{ name: "CSV", extensions: ["csv"] }] });
       if (filePath) {
-        const utxos = await invoke<Utxo[]>("import_utxos", { path: filePath });
+        const csvContent = await readTextFile(filePath);
+        const utxos = await invoke<Utxo[]>("import_utxos", { csvContent });
         onImport(utxos);
         showToast(`Successfully imported ${utxos.length} UTXOs!`, "success");
       }

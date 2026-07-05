@@ -35,6 +35,22 @@ pub struct PsbtSummary {
 
 // ── Parse ─────────────────────────────────────────────────────────────────────
 
+/// Parses a PSBT from raw bytes, returning a human-readable summary.
+///
+/// Supports both raw binary format and base64-encoded PSBTs.
+pub fn parse_psbt_from_bytes(raw: &[u8]) -> Result<(PartiallySignedTransaction, PsbtSummary), String> {
+    let psbt: PartiallySignedTransaction = if raw.starts_with(b"psbt\xff") {
+        deserialize(raw).map_err(|e| format!("Invalid PSBT binary: {}", e))?
+    } else {
+        // Try base64 decode
+        let decoded = base64_decode(raw)?;
+        deserialize(&decoded).map_err(|e| format!("Invalid PSBT (base64): {}", e))?
+    };
+
+    let summary = summarise(&psbt)?;
+    Ok((psbt, summary))
+}
+
 /// Reads and parses a PSBT file from disk, returning a human-readable summary.
 ///
 /// The PSBT must be in standard binary format (base64-encoded files are
@@ -42,18 +58,7 @@ pub struct PsbtSummary {
 pub fn parse_psbt(path: &str) -> Result<(PartiallySignedTransaction, PsbtSummary), String> {
     let raw = std::fs::read(path)
         .map_err(|e| format!("Cannot read PSBT file '{}': {}", path, e))?;
-
-    // Support both raw binary and base64-encoded PSBTs
-    let psbt: PartiallySignedTransaction = if raw.starts_with(b"psbt\xff") {
-        deserialize(&raw).map_err(|e| format!("Invalid PSBT binary: {}", e))?
-    } else {
-        // Try base64 decode
-        let decoded = base64_decode(&raw)?;
-        deserialize(&decoded).map_err(|e| format!("Invalid PSBT (base64): {}", e))?
-    };
-
-    let summary = summarise(&psbt)?;
-    Ok((psbt, summary))
+    parse_psbt_from_bytes(&raw)
 }
 
 /// Parses a PSBT from a raw base64 string (e.g. decoded from a QR code).

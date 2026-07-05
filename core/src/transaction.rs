@@ -100,11 +100,9 @@ pub struct Utxo {
     pub address: String,
 }
 
-/// Import UTXOs from a simple CSV file.
+/// Parse UTXOs from CSV string content.
 /// Format (one per line, no header): txid,vout,amount_btc,address
-pub fn import_utxos_from_csv(path: &str) -> Result<Vec<Utxo>, String> {
-    let contents = std::fs::read_to_string(path)
-        .map_err(|_| format!("Cannot read file '{}'", path))?;
+pub fn parse_utxos_from_csv_content(contents: &str) -> Result<Vec<Utxo>, String> {
     let mut utxos = Vec::new();
     for (lineno, line) in contents.lines().enumerate() {
         let line = line.trim();
@@ -128,6 +126,14 @@ pub fn import_utxos_from_csv(path: &str) -> Result<Vec<Utxo>, String> {
         return Err("No UTXOs found in file.".to_string());
     }
     Ok(utxos)
+}
+
+/// Import UTXOs from a simple CSV file.
+/// Format (one per line, no header): txid,vout,amount_btc,address
+pub fn import_utxos_from_csv(path: &str) -> Result<Vec<Utxo>, String> {
+    let contents = std::fs::read_to_string(path)
+        .map_err(|_| format!("Cannot read file '{}'", path))?;
+    parse_utxos_from_csv_content(&contents)
 }
 
 // ── Transaction builder ───────────────────────────────────────────────────────

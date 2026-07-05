@@ -10,9 +10,28 @@ interface Props {
   onDone: () => void;
 }
 
+// ── Helpers for base64 <-> Uint8Array conversion ──────────────────────────
+
+function uint8ArrayToBase64(bytes: Uint8Array): string {
+  let binary = "";
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+}
+
+function base64ToUint8Array(b64: string): Uint8Array {
+  const binary = atob(b64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
 export default function PsbtSigner({ passphrase, isBase64, showToast, onDone }: Props) {
   const [step, setStep] = useState(1);
-  const [inputData, setInputData] = useState(""); // Path if !isBase64, else b64 string
+  const [inputData, setInputData] = useState(""); // Always base64 string (file bytes or user-pasted)
   const [summary, setSummary] = useState<PsbtSummary | null>(null);
   const [loading, setLoading] = useState(false);
   const [signedB64, setSignedB64] = useState("");
@@ -21,10 +40,13 @@ export default function PsbtSigner({ passphrase, isBase64, showToast, onDone }: 
     setLoading(true);
     try {
       const { open } = await import("@tauri-apps/plugin-dialog");
+      const { readFile } = await import("@tauri-apps/plugin-fs");
       const filePath = await open({ filters: [{ name: "PSBT", extensions: ["psbt"] }] });
       if (filePath) {
-        setInputData(filePath);
-        const res = await invoke<PsbtSummary>("load_psbt", { path: filePath });
+        const fileBytes = await readFile(filePath);
+        const b64 = uint8ArrayToBase64(fileBytes);
+        setInputData(b64);
+        const res = await invoke<PsbtSummary>("load_psbt_from_base64", { b64 });
         setSummary(res);
         setStep(2);
       }
@@ -50,27 +72,24 @@ export default function PsbtSigner({ passphrase, isBase64, showToast, onDone }: 
   const handleSign = async () => {
     setLoading(true);
     try {
-      let outPath = null;
-      if (!isBase64) {
-        const { save } = await import("@tauri-apps/plugin-dialog");
-        outPath = await save({ filters: [{ name: "PSBT", extensions: ["psbt"] }] });
-        if (!outPath) {
-          setLoading(false);
-          return; // Cancelled
-        }
-      }
-
       const b64 = await invoke<string>("sign_and_export_psbt", {
         passphrase,
-        inputData,
-        isBase64,
-        outputPath: outPath,
+        psbtB64: inputData,
       });
 
       setSignedB64(b64);
       setStep(3);
-      if (outPath) {
-        showToast(`Saved to ${outPath}`, "success");
+
+      // If file mode, offer to save the signed PSBT
+      if (!isBase64) {
+        const { save } = await import("@tauri-apps/plugin-dialog");
+        const { writeFile } = await import("@tauri-apps/plugin-fs");
+        const outPath = await save({ filters: [{ name: "PSBT", extensions: ["psbt"] }] });
+        if (outPath) {
+          const signedBytes = base64ToUint8Array(b64);
+          await writeFile(outPath, signedBytes);
+          showToast(`Saved to ${outPath}`, "success");
+        }
       }
     } catch (e: any) {
       showToast(String(e), "error");

@@ -4,7 +4,7 @@ use boma_core::derive_seed_from_mnemonic::derive_seed_from_mnemonic;
 use boma_core::derive_keys::derive_keys;
 use boma_core::generate_many_addresses::generate_many_addresses;
 use boma_core::store_backup::{store_backup, load_backup};
-use boma_core::psbt::{parse_psbt, parse_psbt_from_base64, sign_psbt, export_psbt, psbt_to_base64, PsbtSummary};
+use boma_core::psbt::{parse_psbt_from_bytes, parse_psbt_from_base64, sign_psbt, psbt_to_base64, PsbtSummary};
 use boma_core::config::Config;
 use bitcoin::network::constants::Network;
 use serde::Serialize;
@@ -105,25 +105,25 @@ fn login(passphrase: &str) -> Result<DashboardData, String> {
 }
 
 #[tauri::command]
-fn export_xpub(passphrase: &str, save_path: &str) -> Result<(), String> {
+fn export_xpub(passphrase: &str) -> Result<String, String> {
     let network = wallet_network();
     let mut mnemonic_str = load_backup(passphrase, BACKUP_FILE).map_err(|e| e.to_string())?;
     let mut seed = derive_seed_from_mnemonic(&mnemonic_str, passphrase);
     let root_key = derive_keys(&seed, network).map_err(|e| e.to_string())?.0;
     mnemonic_str.zeroize();
     seed.zeroize();
-    boma_core::wallet_info::export_watch_wallet(&root_key, network, save_path)
+    boma_core::wallet_info::watch_wallet_content(&root_key, network)
 }
 
 #[tauri::command]
-fn export_descriptor(passphrase: &str, save_path: &str) -> Result<(), String> {
+fn export_descriptor(passphrase: &str) -> Result<String, String> {
     let network = wallet_network();
     let mut mnemonic_str = load_backup(passphrase, BACKUP_FILE).map_err(|e| e.to_string())?;
     let mut seed = derive_seed_from_mnemonic(&mnemonic_str, passphrase);
     let root_key = derive_keys(&seed, network).map_err(|e| e.to_string())?.0;
     mnemonic_str.zeroize();
     seed.zeroize();
-    boma_core::wallet_info::export_descriptor(&root_key, network, save_path)
+    boma_core::wallet_info::descriptor_content(&root_key, network)
 }
 
 #[tauri::command]
@@ -138,8 +138,8 @@ fn change_passphrase(old_passphrase: &str, new_passphrase: &str) -> Result<(), S
 }
 
 #[tauri::command]
-fn import_utxos(path: &str) -> Result<Vec<boma_core::transaction::Utxo>, String> {
-    boma_core::transaction::import_utxos_from_csv(path)
+fn import_utxos(csv_content: String) -> Result<Vec<boma_core::transaction::Utxo>, String> {
+    boma_core::transaction::parse_utxos_from_csv_content(&csv_content)
 }
 
 #[tauri::command]
@@ -197,8 +197,8 @@ fn build_transaction(
 }
 
 #[tauri::command]
-fn load_psbt(path: &str) -> Result<PsbtSummary, String> {
-    parse_psbt(path).map(|(_, summary)| summary)
+fn load_psbt(psbt_data: Vec<u8>) -> Result<PsbtSummary, String> {
+    parse_psbt_from_bytes(&psbt_data).map(|(_, summary)| summary)
 }
 
 #[tauri::command]
@@ -209,9 +209,7 @@ fn load_psbt_from_base64(b64: &str) -> Result<PsbtSummary, String> {
 #[tauri::command]
 fn sign_and_export_psbt(
     passphrase: &str,
-    input_data: &str,
-    is_base64: bool,
-    output_path: Option<&str>,
+    psbt_b64: &str,
 ) -> Result<String, String> {
     let cfg = Config::load();
     let mut mnemonic_str = load_backup(passphrase, BACKUP_FILE).map_err(|e| e.to_string())?;
@@ -221,19 +219,8 @@ fn sign_and_export_psbt(
     mnemonic_str.zeroize();
     seed.zeroize();
 
-    let (psbt, _) = if is_base64 {
-        parse_psbt_from_base64(input_data)?
-    } else {
-        parse_psbt(input_data)?
-    };
-
+    let (psbt, _) = parse_psbt_from_base64(psbt_b64)?;
     let signed = sign_psbt(psbt, &root_key, cfg.network)?;
-
-    if let Some(out_path) = output_path {
-        if !out_path.is_empty() {
-            export_psbt(&signed, out_path)?;
-        }
-    }
 
     Ok(psbt_to_base64(&signed))
 }
@@ -266,6 +253,7 @@ fn update_settings(network: &str, session_timeout_secs: u64) -> Result<(), Strin
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             use tauri::Manager;
