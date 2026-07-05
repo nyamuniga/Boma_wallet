@@ -5,12 +5,17 @@ use bitcoin::Network;
 use bitcoin::consensus::deserialize;
 use serde::Serialize;
 
-// ── Public summary struct (returned to CLI and GUI) ───────────────────────────
+// The base64 alphabet used by PSBT (RFC 4648 standard, no URL-safe variant)
+use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
+
+
 
 /// Human-readable PSBT summary for display before signing.
 #[derive(Debug, Clone, Serialize)]
 pub struct PsbtSummary {
-    /// Total satoshis being sent to the destination (non-change outputs).
+    /// Total satoshis across all outputs (destination + change).
+    /// Without access to wallet xpub it is not possible to distinguish change
+    /// from destination outputs at this layer.
     pub send_sats: u64,
     /// Total input value (sum of all UTXO values in the PSBT).
     pub input_sats: u64,
@@ -22,13 +27,29 @@ pub struct PsbtSummary {
     pub input_count: usize,
     /// Number of outputs (including change).
     pub output_count: usize,
-    /// All destination addresses (excluding change back to self).
+    /// All destination addresses (shown for user verification).
     pub destinations: Vec<String>,
     /// True if the fee is suspiciously high (>5% of input value).
     pub fee_warning: bool,
 }
 
 // ── Parse ─────────────────────────────────────────────────────────────────────
+
+/// Parses a PSBT from raw bytes, returning a human-readable summary.
+///
+/// Supports both raw binary format and base64-encoded PSBTs.
+pub fn parse_psbt_from_bytes(raw: &[u8]) -> Result<(PartiallySignedTransaction, PsbtSummary), String> {
+    let psbt: PartiallySignedTransaction = if raw.starts_with(b"psbt\xff") {
+        deserialize(raw).map_err(|e| format!("Invalid PSBT binary: {}", e))?
+    } else {
+        // Try base64 decode
+        let decoded = base64_decode(raw)?;
+        deserialize(&decoded).map_err(|e| format!("Invalid PSBT (base64): {}", e))?
+    };
+
+    let summary = summarise(&psbt)?;
+    Ok((psbt, summary))
+}
 
 /// Reads and parses a PSBT file from disk, returning a human-readable summary.
 ///
@@ -37,18 +58,7 @@ pub struct PsbtSummary {
 pub fn parse_psbt(path: &str) -> Result<(PartiallySignedTransaction, PsbtSummary), String> {
     let raw = std::fs::read(path)
         .map_err(|e| format!("Cannot read PSBT file '{}': {}", path, e))?;
-
-    // Support both raw binary and base64-encoded PSBTs
-    let psbt: PartiallySignedTransaction = if raw.starts_with(b"psbt\xff") {
-        deserialize(&raw).map_err(|e| format!("Invalid PSBT binary: {}", e))?
-    } else {
-        // Try base64 decode
-        let decoded = base64_decode(&raw)?;
-        deserialize(&decoded).map_err(|e| format!("Invalid PSBT (base64): {}", e))?
-    };
-
-    let summary = summarise(&psbt)?;
-    Ok((psbt, summary))
+    parse_psbt_from_bytes(&raw)
 }
 
 /// Parses a PSBT from a raw base64 string (e.g. decoded from a QR code).
@@ -61,13 +71,12 @@ pub fn parse_psbt_from_base64(b64: &str) -> Result<(PartiallySignedTransaction, 
 }
 
 fn base64_decode(input: &[u8]) -> Result<Vec<u8>, String> {
-    // Simple base64 decode using the standard alphabet
     let s = std::str::from_utf8(input)
         .map_err(|_| "PSBT file contains non-UTF-8 data".to_string())?
         .trim();
-    // Use the bitcoin crate's hex or a manual decode — bitcoin 0.29 ships base64 via deps
-    base64::decode(s).map_err(|e| format!("Base64 decode failed: {}", e))
+    BASE64_STANDARD.decode(s).map_err(|e| format!("Base64 decode failed: {}", e))
 }
+
 
 fn summarise(psbt: &PartiallySignedTransaction) -> Result<PsbtSummary, String> {
     // Sum all known input values from PSBT witness_utxo / non_witness_utxo
@@ -88,13 +97,15 @@ fn summarise(psbt: &PartiallySignedTransaction) -> Result<PsbtSummary, String> {
     let fee_sats = input_sats.saturating_sub(total_out);
     let fee_pct = if input_sats > 0 { fee_sats as f64 / input_sats as f64 * 100.0 } else { 0.0 };
 
-    // Collect destination addresses (all outputs — caller or UI can mark change)
+    // Collect all output addresses for the user to review
     let destinations: Vec<String> = psbt.unsigned_tx.output.iter()
         .filter_map(|o| bitcoin::util::address::Address::from_script(&o.script_pubkey, bitcoin::Network::Bitcoin).ok())
         .map(|a| a.to_string())
         .collect();
 
-    let send_sats: u64 = psbt.unsigned_tx.output.iter().map(|o| o.value).sum();
+    // send_sats = total_out (destination + change combined).
+    // Without the wallet xpub we cannot distinguish change from recipient.
+    let send_sats = total_out;
 
     Ok(PsbtSummary {
         send_sats,
@@ -215,84 +226,8 @@ pub fn export_psbt(psbt: &PartiallySignedTransaction, path: &str) -> Result<(), 
 /// Returns the PSBT as a base64 string (for QR code display).
 pub fn psbt_to_base64(psbt: &PartiallySignedTransaction) -> String {
     use bitcoin::consensus::encode::serialize;
-    base64::encode(serialize(psbt))
+    BASE64_STANDARD.encode(serialize(psbt))
 }
 
-// ── base64 helper (reuse the dep already pulled in by bitcoin crate) ──────────
 
-mod base64 {
-    pub fn decode(s: &str) -> Result<Vec<u8>, String> {
-        // Manual decode using the standard base64 alphabet
-        let alphabet = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-        let mut lookup = [255u8; 256];
-        for (i, &c) in alphabet.iter().enumerate() { lookup[c as usize] = i as u8; }
 
-        let s = s.replace('\n', "").replace('\r', "").replace(' ', "");
-        let s = s.trim_end_matches('=');
-        let mut out = Vec::with_capacity(s.len() * 3 / 4);
-        let bytes = s.as_bytes();
-        let mut i = 0;
-        while i + 3 < bytes.len() {
-            let [a, b, c, d] = [
-                lookup[bytes[i] as usize],
-                lookup[bytes[i+1] as usize],
-                lookup[bytes[i+2] as usize],
-                lookup[bytes[i+3] as usize],
-            ];
-            if a == 255 || b == 255 || c == 255 || d == 255 {
-                return Err("Invalid base64 character".to_string());
-            }
-            out.push((a << 2) | (b >> 4));
-            out.push((b << 4) | (c >> 2));
-            out.push((c << 6) | d);
-            i += 4;
-        }
-        // Handle remaining bytes
-        match bytes.len() - i {
-            2 => {
-                let [a, b] = [lookup[bytes[i] as usize], lookup[bytes[i+1] as usize]];
-                if a == 255 || b == 255 { return Err("Invalid base64".to_string()); }
-                out.push((a << 2) | (b >> 4));
-            }
-            3 => {
-                let [a, b, c] = [lookup[bytes[i] as usize], lookup[bytes[i+1] as usize], lookup[bytes[i+2] as usize]];
-                if a == 255 || b == 255 || c == 255 { return Err("Invalid base64".to_string()); }
-                out.push((a << 2) | (b >> 4));
-                out.push((b << 4) | (c >> 2));
-            }
-            _ => {}
-        }
-        Ok(out)
-    }
-
-    pub fn encode(data: Vec<u8>) -> String {
-        let alphabet = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-        let mut out = String::new();
-        let mut i = 0;
-        while i + 2 < data.len() {
-            let [a, b, c] = [data[i], data[i+1], data[i+2]];
-            out.push(alphabet[(a >> 2) as usize] as char);
-            out.push(alphabet[((a & 3) << 4 | b >> 4) as usize] as char);
-            out.push(alphabet[((b & 15) << 2 | c >> 6) as usize] as char);
-            out.push(alphabet[(c & 63) as usize] as char);
-            i += 3;
-        }
-        match data.len() - i {
-            1 => {
-                let a = data[i];
-                out.push(alphabet[(a >> 2) as usize] as char);
-                out.push(alphabet[((a & 3) << 4) as usize] as char);
-                out.push_str("==");
-            }
-            2 => {
-                let [a, b] = [data[i], data[i+1]];
-                out.push(alphabet[(a >> 2) as usize] as char);
-                out.push(alphabet[((a & 3) << 4 | b >> 4) as usize] as char);
-                out.push(alphabet[((b & 15) << 2) as usize] as char);
-                out.push('=');
-            }
-            _ => {}
-        }
-        out
-    }
-}

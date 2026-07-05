@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { save } from "@tauri-apps/plugin-dialog";
+import { writeTextFile } from "@tauri-apps/plugin-fs";
 import { DashboardData } from "../types";
 import { ToastType } from "../hooks/useToast";
 
@@ -19,18 +20,20 @@ export default function WalletMenu({ dashboard, passphrase, onNavigate, onLock, 
 
   const handleExportXpub = async () => {
     try {
+      const content = await invoke<string>("export_xpub", { passphrase });
       const savePath = await save({ filters: [{ name: "Text", extensions: ["txt"] }], defaultPath: "watch_wallet.txt" });
       if (!savePath) return;
-      await invoke("export_xpub", { passphrase, savePath });
+      await writeTextFile(savePath, content);
       showToast("Watch-only wallet exported successfully!", "success");
     } catch (e: any) { showToast(String(e), "error"); }
   };
 
   const handleExportDescriptor = async () => {
     try {
+      const content = await invoke<string>("export_descriptor", { passphrase });
       const savePath = await save({ filters: [{ name: "Text", extensions: ["txt"] }], defaultPath: "wallet_descriptor.txt" });
       if (!savePath) return;
-      await invoke("export_descriptor", { passphrase, savePath });
+      await writeTextFile(savePath, content);
       showToast("Descriptor exported successfully!", "success");
     } catch (e: any) { showToast(String(e), "error"); }
   };

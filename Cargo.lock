@@ -402,13 +402,13 @@ version = "0.1.3"
 dependencies = [
  "aes-gcm",
  "argon2",
+ "base64 0.21.7",
  "bip39",
  "bitcoin",
  "hex",
  "hmac",
  "pbkdf2",
  "rand",
- "secrecy",
  "serde",
  "serde_json",
  "sha2",
@@ -1568,12 +1568,12 @@ dependencies = [
  "bip39",
  "bitcoin",
  "boma-core",
- "dirs",
  "serde",
  "serde_json",
  "tauri",
  "tauri-build",
  "tauri-plugin-dialog",
+ "tauri-plugin-fs",
  "tauri-plugin-opener",
  "zeroize",
 ]
@@ -3232,15 +3232,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "83080e2c2fc1006e625be82e5d1eb6a43b7fd9578b617fcc55814daf286bba4b"
 dependencies = [
  "cc",
-]
-
-[[package]]
-name = "secrecy"
-version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9bd1c54ea06cfd2f6b63219704de0b9b4f72dcc2b8fdef820be6cd799780e91e"
-dependencies = [
- "zeroize",
 ]
 
 [[package]]

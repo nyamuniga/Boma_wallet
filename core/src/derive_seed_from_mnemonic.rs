@@ -12,20 +12,19 @@ use zeroize::{Zeroize, Zeroizing};
 ///   - PRF       = HMAC-SHA512
 ///
 /// This makes wallets compatible with Ledger, Trezor, Electrum, Sparrow, etc.
-pub fn derive_seed_from_mnemonic(mnemonic: &str, passphrase: &str) -> Vec<u8> {
+///
+/// Returns a `Zeroizing<Vec<u8>>` that automatically wipes itself from memory when dropped.
+/// Callers do NOT need to call `.zeroize()` manually, though doing so is harmless.
+pub fn derive_seed_from_mnemonic(mnemonic: &str, passphrase: &str) -> Zeroizing<Vec<u8>> {
     let mnemonic_bytes = mnemonic.as_bytes();
 
     let mut salt = format!("mnemonic{}", passphrase);
     let salt_bytes = salt.as_bytes();
 
-    // Use Zeroizing vector so it scrubs when dropped or returned and dropped later
     let mut seed = Zeroizing::new(vec![0u8; 64]);
     pbkdf2::<Hmac<Sha512>>(mnemonic_bytes, salt_bytes, 2048, &mut seed);
 
     salt.zeroize();
-    
-    // We return the raw Vec<u8> so callers don't need zeroize imports, 
-    // but callers must zeroize it after use.
-    let out = seed.to_vec();
-    out
+
+    seed
 }

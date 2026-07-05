@@ -4,6 +4,8 @@ use bitcoin::util::address::Address;
 use bitcoin::util::bip32::{DerivationPath, ExtendedPrivKey};
 use bitcoin::PublicKey;
 use std::str::FromStr;
+use crate::transaction::coin_type;
+
 
 /// Derives the master root key and the first BIP-84 receive address.
 ///
@@ -14,7 +16,8 @@ pub fn derive_keys(
     network: Network,
 ) -> Result<(ExtendedPrivKey, SecretKey, bitcoin::PublicKey, Address), String> {
     let secp = Secp256k1::new();
-    let coin = if network == Network::Bitcoin { 0 } else { 1 };
+    let coin = coin_type(network);
+
 
     let root_key = ExtendedPrivKey::new_master(network, seed)
         .map_err(|e| format!("Failed to create master key: {}", e))?;

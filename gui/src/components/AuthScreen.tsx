@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { WalletData, DashboardData, AuthView } from "../types";
 import { ToastType } from "../hooks/useToast";
@@ -274,12 +274,12 @@ function SettingsPanel({ onBack, showToast }: { onBack: () => void; showToast: (
   const [timeout, setTimeout_]  = useState(300);
   const [loaded, setLoaded]     = useState(false);
 
-  // Load on first render
-  if (!loaded) {
+  // Load settings once on mount — never inline invoke() in the render body
+  useEffect(() => {
     invoke<{ network: string; session_timeout_secs: number }>("get_settings")
       .then((cfg) => { setNetwork(cfg.network); setTimeout_(cfg.session_timeout_secs); setLoaded(true); })
       .catch(() => setLoaded(true));
-  }
+  }, []);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
