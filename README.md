@@ -8,22 +8,20 @@
 
 BOMA (meaning "fortified enclosure" or "stronghold") is an air-gapped Bitcoin wallet designed for maximum security. It allows you to generate keys, receive funds, and sign transactions entirely offline, ensuring your private keys never touch the internet. 
 
-BOMA strictly adheres to Bitcoin standards (BIP-39, BIP-32, BIP-44) for full interoperability with other major wallets like Electrum, Sparrow, and Ledger.
+BOMA strictly adheres to Bitcoin standards (BIP-39, BIP-84 for native SegWit, PSBTs) for full interoperability with other major wallets like Electrum, Sparrow, and Ledger.
 
 It is split into a modular workspace:
-- **`boma-core`**: The secure cryptographic engine containing all logic, completely decoupled from any UI.
+- **`boma-core`**: The secure cryptographic engine containing all logic, strictly enforcing memory hygiene and entropy health checks.
 - **`boma-cli`**: A lightweight, hacker-friendly terminal interface.
 - **`gui`**: A premium, responsive desktop application built with Tauri v2, React, and TailwindCSS v4.
 
-## What BOMA Does
+## Core Features & Security Guarantees
 
-- **Creates Secure Wallets:** Generates a secure 12-word or 24-word Recovery Phrase using OS-level cryptographic entropy. It encrypts this phrase locally with AES-256-GCM so you don't have to type your phrase every time you log in.
-- **Restores Existing Wallets:** Instantly restore any standard BIP-39 mnemonic (12 or 24 words), with optional 25th word passphrase support.
-- **Receives Bitcoin:** Generates receive addresses and displays scannable QR codes in both the GUI and CLI, making it easy to send funds to your cold wallet from your phone.
-- **Signs Transactions Offline:** Allows you to securely spend your Bitcoin without your private keys ever touching an internet-connected device.
-- **Imports UTXOs:** Easily load UTXOs (Unspent Transaction Outputs) via CSV files for fast, offline transaction building.
-- **Protects Memory:** Actively wipes sensitive materials (like the master seed) from your computer's RAM immediately after keys are derived.
-- **Exports Watch-Only Data:** Exports an "xpub" file or standard descriptor which you can safely load onto an online computer (like Sparrow Wallet) to track your balances and receive payments.
+- **Cryptographically Guaranteed Entropy:** Recovery Phrases are generated using a double-sampling OS RNG strategy verified against NIST SP 800-90B health tests (evaluating distinct values, repetition, and chi-squared uniformity). If the OS entropy degrades, the wallet refuses to generate keys rather than risk your funds.
+- **Defense-in-Depth Memory Hygiene:** Sensitive material (mnemonics, private keys, decrypted payloads) are deterministically zeroized from RAM immediately upon session lock, timeout, or exit to mitigate cold-boot forensics.
+- **PSBT (Partially Signed Bitcoin Transactions):** Natively parses, validates, and signs PSBTs offline, supporting complex multi-input derivations and hardware wallet interoperability workflows.
+- **Change Address Rotation:** Automatically rotates change outputs across the `m/84'/0'/0'/1/*` derivation path, preserving on-chain privacy by never reusing change addresses.
+- **Tamper-Evident Auditing:** The CLI maintains a cryptographic hash chain log of all activities. Any post-hoc modification or deletion of log entries immediately breaks the chain and alerts the user.
 
 > [!WARNING]
 > **Never store your Recovery Phrase digitally.** Do not take a photo of it, and do not save it in a text file. If someone finds your Recovery Phrase, they can steal your Bitcoin. Only ever run BOMA on an offline, air-gapped machine.
@@ -58,17 +56,18 @@ For maximum security, BOMA is designed to be run on an air-gapped computer.
 
 ### How to Send Bitcoin (Offline Signing Workflow)
 Because BOMA cannot connect to the internet to broadcast a transaction, you must follow this secure workflow to send funds:
-1. Use an internet-connected device to look up your Bitcoin address on a block explorer and find the "UTXO" (the unspent chunk of Bitcoin you want to spend), or export a UTXO CSV from a watch-only wallet.
-2. In the offline BOMA app, select "Sign transaction" (or load your UTXO CSV). Enter the UTXO details, the recipient address, and select a fee tier.
-3. BOMA will mathematically sign the transaction and output a long string of text called "Raw Hex".
-4. Copy that Hex text, transfer it back to your online device, and paste it into a transaction broadcaster (like `https://blockstream.info/tx/push`).
+1. Export your wallet's xpub or descriptor from BOMA to an internet-connected, watch-only wallet (like Sparrow or Electrum).
+2. Build your transaction in the watch-only wallet, and export it as a **PSBT**.
+3. Transfer the PSBT to your offline BOMA app via USB.
+4. Review and sign the PSBT in BOMA. BOMA will mathematically sign the transaction and output a finalized PSBT (or raw hex).
+5. Transfer the signed transaction back to your online device and broadcast it to the network!
 
 ## Architecture Details
-- **BIP-44 Standard:** Receive addresses derived at `m/44'/0'/0'/0/{i}` and change addresses at `m/44'/0'/0'/1/{i}`.
-- **RBF (Replace-By-Fee):** Supported natively via sequence `0xFFFFFFFD`.
-- **Dynamic Fee Estimation:** Built-in P2PKH vbyte calculator.
+- **BIP-84 Standard:** Native SegWit (P2WPKH) receive addresses derived at `m/84'/0'/0'/0/{i}` and change addresses at `m/84'/0'/0'/1/{i}`.
+- **Passphrase Validation:** Server-side enforcement of complex passphrases to ensure offline brute-force resistance.
+- **RBF (Replace-By-Fee):** Supported natively via sequence `0xFFFFFFFD` and transaction Version 2.
 - **Mainnet / Testnet Support:** Instantly toggleable via settings.
-- **Stateless Operation:** The wallet runs entirely in memory. The `backup.txt` file only contains the AES-GCM nonce, salt, and ciphertext. 
+- **Stateless Operation:** The wallet runs entirely in memory. The `backup.txt` file is restricted (0600 permissions) and only contains the AES-256-GCM nonce, salt, and ciphertext. 
 
 ## Open Source & Contributing
 BOMA is fully open-source. We believe security tools must be transparent and verifiable by the community. Contributions, issues, and feature requests are highly encouraged!
