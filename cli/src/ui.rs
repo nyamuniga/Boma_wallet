@@ -40,7 +40,7 @@ pub fn header(title: &str, breadcrumb: &str) {
     clear();
     let w = 54usize;
     println!("\n  {}{}┌{}┐{}", BOLD, ORANGE, "─".repeat(w), RESET);
-    let t = "₿  BOMA Cold Wallet     │  v0.3".to_string();
+    let t = format!("₿  BOMA Cold Wallet     │  v{}", env!("CARGO_PKG_VERSION"));
     println!("  {}{}│ {:<w$}│{}", BOLD, ORANGE, t, RESET, w = w - 1);
     if !breadcrumb.is_empty() {
         println!("  {}{}│ {:<w$}│{}", DIM, ORANGE, breadcrumb, RESET, w = w - 1);
