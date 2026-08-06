@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { QRCodeSVG } from "qrcode.react";
 import { DashboardData, Utxo } from "../types";
@@ -60,12 +60,20 @@ export function AllAddressesView({ addresses }: { addresses: string[] }) {
 // ── Wallet Summary View ───────────────────────────────────────────────────
 
 export function WalletSummaryView({ dashboard }: { dashboard: DashboardData }) {
+  const [network, setNetwork] = useState("Loading...");
+
+  useEffect(() => {
+    invoke<{ network: string; session_timeout_secs: number }>("get_settings")
+      .then((cfg) => setNetwork(cfg.network === "testnet" ? "Testnet" : "Mainnet ₿"))
+      .catch(() => setNetwork("Unknown"));
+  }, []);
+
   return (
     <div>
       <h2 className="text-orange-400 text-lg mb-4">Wallet Summary</h2>
       <div className="space-y-4 font-mono text-sm">
         <SummaryRow label="Fingerprint" value={dashboard.fingerprint} />
-        <SummaryRow label="Network"     value="Mainnet ₿" />
+        <SummaryRow label="Network"     value={network} />
         <SummaryRow label="Addresses"   value={`${dashboard.receive_addresses.length} derived`} />
       </div>
     </div>

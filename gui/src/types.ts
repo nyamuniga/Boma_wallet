@@ -1,7 +1,7 @@
 // Shared TypeScript types used across GUI components
 
 export interface WalletData {
-  mnemonic: string;
+  word_count: number;
   fingerprint: string;
 }
 

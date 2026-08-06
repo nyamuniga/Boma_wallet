@@ -8,7 +8,9 @@ use serde::Serialize;
 // The base64 alphabet used by PSBT (RFC 4648 standard, no URL-safe variant)
 use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
 
-
+/// Absolute fee warning threshold in satoshis (0.0005 BTC).
+/// Fees above this are flagged regardless of percentage.
+const ABSOLUTE_FEE_WARNING_SATS: u64 = 50_000;
 
 /// Human-readable PSBT summary for display before signing.
 #[derive(Debug, Clone, Serialize)]
@@ -31,6 +33,8 @@ pub struct PsbtSummary {
     pub destinations: Vec<String>,
     /// True if the fee is suspiciously high (>5% of input value).
     pub fee_warning: bool,
+    /// True if the absolute fee exceeds the safety threshold (50,000 sats / 0.0005 BTC).
+    pub absolute_fee_warning: bool,
 }
 
 // ── Parse ─────────────────────────────────────────────────────────────────────
@@ -38,7 +42,9 @@ pub struct PsbtSummary {
 /// Parses a PSBT from raw bytes, returning a human-readable summary.
 ///
 /// Supports both raw binary format and base64-encoded PSBTs.
-pub fn parse_psbt_from_bytes(raw: &[u8]) -> Result<(PartiallySignedTransaction, PsbtSummary), String> {
+/// The `network` parameter ensures addresses are decoded correctly for
+/// the active network (mainnet vs testnet).
+pub fn parse_psbt_from_bytes(raw: &[u8], network: Network) -> Result<(PartiallySignedTransaction, PsbtSummary), String> {
     let psbt: PartiallySignedTransaction = if raw.starts_with(b"psbt\xff") {
         deserialize(raw).map_err(|e| format!("Invalid PSBT binary: {}", e))?
     } else {
@@ -47,7 +53,7 @@ pub fn parse_psbt_from_bytes(raw: &[u8]) -> Result<(PartiallySignedTransaction, 
         deserialize(&decoded).map_err(|e| format!("Invalid PSBT (base64): {}", e))?
     };
 
-    let summary = summarise(&psbt)?;
+    let summary = summarise(&psbt, network)?;
     Ok((psbt, summary))
 }
 
@@ -55,18 +61,18 @@ pub fn parse_psbt_from_bytes(raw: &[u8]) -> Result<(PartiallySignedTransaction, 
 ///
 /// The PSBT must be in standard binary format (base64-encoded files are
 /// automatically detected and decoded).
-pub fn parse_psbt(path: &str) -> Result<(PartiallySignedTransaction, PsbtSummary), String> {
+pub fn parse_psbt(path: &str, network: Network) -> Result<(PartiallySignedTransaction, PsbtSummary), String> {
     let raw = std::fs::read(path)
         .map_err(|e| format!("Cannot read PSBT file '{}': {}", path, e))?;
-    parse_psbt_from_bytes(&raw)
+    parse_psbt_from_bytes(&raw, network)
 }
 
 /// Parses a PSBT from a raw base64 string (e.g. decoded from a QR code).
-pub fn parse_psbt_from_base64(b64: &str) -> Result<(PartiallySignedTransaction, PsbtSummary), String> {
+pub fn parse_psbt_from_base64(b64: &str, network: Network) -> Result<(PartiallySignedTransaction, PsbtSummary), String> {
     let decoded = base64_decode(b64.trim().as_bytes())?;
     let psbt: PartiallySignedTransaction = deserialize(&decoded)
         .map_err(|e| format!("Invalid PSBT data: {}", e))?;
-    let summary = summarise(&psbt)?;
+    let summary = summarise(&psbt, network)?;
     Ok((psbt, summary))
 }
 
@@ -78,7 +84,7 @@ fn base64_decode(input: &[u8]) -> Result<Vec<u8>, String> {
 }
 
 
-fn summarise(psbt: &PartiallySignedTransaction) -> Result<PsbtSummary, String> {
+fn summarise(psbt: &PartiallySignedTransaction, network: Network) -> Result<PsbtSummary, String> {
     // Sum all known input values from PSBT witness_utxo / non_witness_utxo
     let input_sats: u64 = psbt.inputs.iter().enumerate().try_fold(0u64, |acc, (i, inp)| {
         let val = inp.witness_utxo.as_ref().map(|u| u.value)
@@ -97,9 +103,9 @@ fn summarise(psbt: &PartiallySignedTransaction) -> Result<PsbtSummary, String> {
     let fee_sats = input_sats.saturating_sub(total_out);
     let fee_pct = if input_sats > 0 { fee_sats as f64 / input_sats as f64 * 100.0 } else { 0.0 };
 
-    // Collect all output addresses for the user to review
+    // M2: Use the configured network for address decoding
     let destinations: Vec<String> = psbt.unsigned_tx.output.iter()
-        .filter_map(|o| bitcoin::util::address::Address::from_script(&o.script_pubkey, bitcoin::Network::Bitcoin).ok())
+        .filter_map(|o| bitcoin::util::address::Address::from_script(&o.script_pubkey, network).ok())
         .map(|a| a.to_string())
         .collect();
 
@@ -116,6 +122,8 @@ fn summarise(psbt: &PartiallySignedTransaction) -> Result<PsbtSummary, String> {
         output_count: psbt.unsigned_tx.output.len(),
         destinations,
         fee_warning: fee_pct > 5.0,
+        // L5: Absolute fee warning in addition to percentage-based
+        absolute_fee_warning: fee_sats > ABSOLUTE_FEE_WARNING_SATS,
     })
 }
 
@@ -228,6 +236,3 @@ pub fn psbt_to_base64(psbt: &PartiallySignedTransaction) -> String {
     use bitcoin::consensus::encode::serialize;
     BASE64_STANDARD.encode(serialize(psbt))
 }
-
-
-

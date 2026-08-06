@@ -1,7 +1,7 @@
 use std::path::Path;
 use std::thread;
 use std::time::{Duration, Instant};
-use zeroize::Zeroize;
+use zeroize::{Zeroize, Zeroizing};
 use bitcoin::network::constants::Network;
 
 mod ui;
@@ -77,13 +77,17 @@ fn create_new_wallet(cfg: &Config, audit: &AuditLog) {
         if ans != "yes" { ui::info("Cancelled."); ui::pause(); return; }
     }
 
-    // Generate entropy and mnemonic
-    let entropy = generate_entropy();
+    // Generate entropy with NIST health checks
+    let mut entropy = match generate_entropy() {
+        Ok(e) => e,
+        Err(e) => { ui::error(&format!("Entropy generation failed: {}", e)); ui::pause(); return; }
+    };
     let mnemonic = match generate_mnemonic(&entropy) {
         Ok(m) => m,
-        Err(e) => { ui::error(&format!("Failed to generate mnemonic: {}", e)); ui::pause(); return; }
+        Err(e) => { entropy.zeroize(); ui::error(&format!("Failed to generate mnemonic: {}", e)); ui::pause(); return; }
     };
-    let mnemonic_str = mnemonic.to_string();
+    entropy.zeroize();
+    let mnemonic_str = Zeroizing::new(mnemonic.to_string());
 
 
     // Display mnemonic
@@ -95,6 +99,7 @@ fn create_new_wallet(cfg: &Config, audit: &AuditLog) {
         print!("  {}{:>2}.{} {:<12}", ui::DIM, i + 1, ui::RESET, word);
         if (i + 1) % 4 == 0 { println!(); }
     }
+    drop(words); // drop references before zeroize
     println!("\n");
     ui::pause();
 
@@ -124,6 +129,7 @@ fn create_new_wallet(cfg: &Config, audit: &AuditLog) {
     }
 
     seed.zeroize();
+    // mnemonic_str is Zeroizing<String> — auto-zeroized on drop
     ui::pause();
 }
 
@@ -193,9 +199,11 @@ fn login_with_passphrase(cfg: &Config, audit: &AuditLog) {
         cfg,
         audit,
         preloaded_utxos: Vec::new(),
+        change_index: 0,
     };
 
     wallet_session(&mut state);
+    // SessionState::drop() zeroizes all key material automatically
 }
 
 // ── Wallet session ────────────────────────────────────────────────────────────
@@ -265,7 +273,8 @@ fn wallet_session(state: &mut SessionState) {
             "12" => session_actions::handle_change_passphrase(state),
             "13" => {
                 state.audit.log("SESSION_END");
-                ui::info("Wallet locked. All key material cleared from memory.");
+                // SessionState::drop() zeroizes mnemonic, root_key, and all SecretKeys
+                ui::info("Wallet locked. All key material will be zeroized from memory.");
                 return;
             }
 

@@ -11,6 +11,7 @@ pub mod psbt;
 pub mod store_backup;
 pub mod wallet_info;
 pub mod transaction;
+pub mod passphrase_strength;
 
 #[cfg(test)]
 mod tests;
