@@ -194,6 +194,17 @@ mod btc_to_sats_tests {
     fn whitespace_trimmed() {
         assert_eq!(btc_to_sats("  0.005  ").unwrap(), 500_000);
     }
+
+    #[test]
+    fn leading_zeros_rejected() {
+        assert!(btc_to_sats("00").is_err(), "00 should be rejected");
+        assert!(btc_to_sats("01").is_err(), "01 should be rejected");
+        assert!(btc_to_sats("007").is_err(), "007 should be rejected");
+        assert!(btc_to_sats("01.5").is_err(), "01.5 should be rejected");
+        // Bare "0" is still allowed
+        assert_eq!(btc_to_sats("0").unwrap(), 0);
+        assert_eq!(btc_to_sats("0.5").unwrap(), 50_000_000);
+    }
 }
 
 #[cfg(test)]
@@ -212,7 +223,7 @@ mod transaction_smoke_test {
     /// (i.e., is structurally valid Bitcoin). Uses a fake UTXO — this is never broadcast.
     #[test]
     fn build_and_deserialize_signed_tx() {
-        let entropy = generate_entropy();
+        let entropy = generate_entropy().expect("entropy generation must succeed");
         let mnemonic = generate_mnemonic(&entropy).expect("mnemonic generation must succeed");
         let mnemonic_str = mnemonic.to_string();
         let seed = derive_seed_from_mnemonic(&mnemonic_str, "test-pass-99!");
@@ -254,5 +265,7 @@ mod transaction_smoke_test {
         assert_eq!(tx.input.len(), 1, "must have exactly 1 input");
         assert!(!tx.output.is_empty(), "must have at least 1 output");
         assert!(!tx.input[0].witness.is_empty(), "P2WPKH must populate the witness");
+        // L4: Verify transaction version 2
+        assert_eq!(tx.version, 2, "transaction must use version 2");
     }
 }

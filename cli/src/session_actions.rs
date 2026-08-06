@@ -34,12 +34,13 @@ pub fn handle_view_all_addresses(state: &SessionState) {
     ui::pause();
 }
 
-pub fn handle_sign_transaction(state: &SessionState) {
+pub fn handle_sign_transaction(state: &mut SessionState) {
     let params_res = collect_send_params(
         &state.receive_addresses,
         &state.change_addresses,
         &state.preloaded_utxos,
         false,
+        state.change_index,
     );
 
     match params_res {
@@ -50,6 +51,8 @@ pub fn handle_sign_transaction(state: &SessionState) {
                 ui::info("Broadcast at: https://blockstream.info/tx/push");
                 println!("\n  {}{}{}\n", ui::CYAN, hex, ui::RESET);
                 state.audit.log("TX_SIGNED");
+                // H2: Rotate to next change address for privacy
+                state.change_index += 1;
             }
             Err(e) => ui::error(&e),
         },
@@ -64,6 +67,7 @@ pub fn handle_dry_run(state: &SessionState) {
         &state.change_addresses,
         &state.preloaded_utxos,
         true,
+        state.change_index,
     );
 
     match params_res {
@@ -288,12 +292,12 @@ pub fn handle_sign_psbt(state: &SessionState) {
     let parse_result = match choice.trim() {
         "1" => {
             let path = ui::prompt("Path to .psbt file", "Full file path, e.g. /media/usb/unsigned.psbt");
-            parse_psbt(&path)
+            parse_psbt(&path, state.cfg.network)
         }
         "2" => {
             ui::info("Paste the base64 PSBT string and press Enter:");
             let b64 = ui::prompt("Base64 PSBT", "Paste here.");
-            parse_psbt_from_base64(&b64)
+            parse_psbt_from_base64(&b64, state.cfg.network)
         }
         _ => { ui::error("Invalid choice."); ui::pause(); return; }
     };
@@ -317,6 +321,9 @@ pub fn handle_sign_psbt(state: &SessionState) {
     );
     if summary.fee_warning {
         ui::warn("⚠  Fee is unusually HIGH (>5% of input). Verify before signing!");
+    }
+    if summary.absolute_fee_warning {
+        ui::warn("⚠  Absolute fee exceeds 50,000 sats (0.0005 BTC). Double-check!");
     }
     println!();
     ui::section("Destination Addresses");

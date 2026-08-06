@@ -22,7 +22,8 @@ pub fn coin_type(network: Network) -> u32 {
 /// Converts a BTC-denominated string (e.g. "0.00500000") to satoshis using fixed-point
 /// integer arithmetic — no floating-point involved, so there is no IEEE 754 rounding risk.
 ///
-/// Accepts up to 8 decimal places. Rejects negative values, empty inputs, and malformed strings.
+/// Accepts up to 8 decimal places. Rejects negative values, empty inputs, malformed strings,
+/// and integer portions with leading zeros (except bare "0" before a decimal point).
 pub fn btc_to_sats(s: &str) -> Result<u64, String> {
     let s = s.trim();
     let err = || format!("'{}' is not a valid BTC amount — use format like 0.00500000", s);
@@ -49,6 +50,15 @@ pub fn btc_to_sats(s: &str) -> Result<u64, String> {
     }
     if frac_str.len() > 8 {
         return Err("Too many decimal places — Bitcoin has at most 8.".to_string());
+    }
+
+    // ── L3: Reject leading zeros in the integer portion ───────────────────
+    // "00", "01", "007" are ambiguous and potentially mask the true amount.
+    // Only bare "" (before ".5") and "0" are allowed.
+    if int_str.len() > 1 && int_str.starts_with('0') {
+        return Err(format!(
+            "'{}' has leading zeros — remove them to avoid ambiguity.", s
+        ));
     }
 
     // Integer BTC portion → satoshis (multiply by 10^8)
@@ -152,10 +162,11 @@ pub struct TxParams<'a> {
     pub dry_run: bool,
 }
 
-/// Build (and optionally sign) a P2WPKH transaction.
+/// Build (and optionally sign) a single-input P2WPKH transaction.
 ///
 /// In dry-run mode, returns the unsigned hex to show the structure without signing.
 /// RBF sets nSequence = 0xFFFFFFFD to signal replaceability.
+/// Uses transaction version 2 (required for BIP-68 relative timelocks).
 pub fn build_transaction(p: &TxParams) -> Result<String, String> {
     let total = p.send_sats
         .checked_add(p.fee_sats)
@@ -193,8 +204,9 @@ pub fn build_transaction(p: &TxParams) -> Result<String, String> {
         });
     }
 
+    // L4: Use transaction version 2 — modern standard, required for BIP-68
     let mut tx = Transaction {
-        version: 1,
+        version: 2,
         lock_time: PackedLockTime::ZERO,
         input: vec![txin],
         output: outputs,
@@ -206,35 +218,142 @@ pub fn build_transaction(p: &TxParams) -> Result<String, String> {
     }
 
     // Sign the P2WPKH input
+    sign_p2wpkh_input(&mut tx, 0, p.from_key, p.from_address, p.input_sats)?;
+
+    Ok(hex::encode(serialize(&tx)))
+}
+
+// ── Multi-input transaction builder (H3) ──────────────────────────────────────
+
+/// Parameters for a multi-input P2WPKH transaction.
+pub struct MultiTxParams<'a> {
+    /// Each input: (UTXO, signing key, source address).
+    pub inputs: Vec<(&'a Utxo, &'a SecretKey, &'a Address)>,
+    pub to_address: Address,
+    pub send_sats: u64,
+    pub fee_sats: u64,
+    pub change_address: &'a Address,
+    pub use_rbf: bool,
+    pub dry_run: bool,
+}
+
+/// Build (and optionally sign) a multi-input P2WPKH transaction.
+///
+/// This allows consolidating funds spread across multiple UTXOs into a single
+/// transaction. Each input is signed independently with its own private key.
+/// Uses transaction version 2 (BIP-68 compatible).
+pub fn build_multi_input_transaction(p: &MultiTxParams) -> Result<String, String> {
+    if p.inputs.is_empty() {
+        return Err("At least one input is required.".to_string());
+    }
+
+    // Sum all input values
+    let total_input: u64 = p.inputs.iter()
+        .map(|(utxo, _, _)| utxo.amount_sats)
+        .try_fold(0u64, |acc, v| acc.checked_add(v))
+        .ok_or("Input sum overflow.")?;
+
+    let total_needed = p.send_sats
+        .checked_add(p.fee_sats)
+        .ok_or("Amount overflow.")?;
+
+    if total_needed > total_input {
+        return Err(format!(
+            "Insufficient funds.\n    Available: {} sats ({:.8} BTC)\n    Needed:    {} sats ({:.8} BTC)",
+            total_input, total_input as f64 / 1e8,
+            total_needed, total_needed as f64 / 1e8
+        ));
+    }
+    let change_sats = total_input - total_needed;
+
+    let sequence = if p.use_rbf { Sequence(0xFFFF_FFFD) } else { Sequence::MAX };
+
+    // Build inputs
+    let mut tx_inputs = Vec::with_capacity(p.inputs.len());
+    for (utxo, _, _) in &p.inputs {
+        let txid = Txid::from_str(&utxo.txid)
+            .map_err(|_| format!("Invalid Transaction ID: {}", &utxo.txid))?;
+        tx_inputs.push(TxIn {
+            previous_output: OutPoint { txid, vout: utxo.vout },
+            script_sig: Builder::new().into_script(),
+            sequence,
+            witness: Witness::default(),
+        });
+    }
+
+    // Build outputs
+    let mut outputs = vec![TxOut {
+        value: p.send_sats,
+        script_pubkey: p.to_address.script_pubkey(),
+    }];
+
+    if change_sats >= DUST_SATS {
+        outputs.push(TxOut {
+            value: change_sats,
+            script_pubkey: p.change_address.script_pubkey(),
+        });
+    }
+
+    let mut tx = Transaction {
+        version: 2,
+        lock_time: PackedLockTime::ZERO,
+        input: tx_inputs,
+        output: outputs,
+    };
+
+    if p.dry_run {
+        return Ok(format!("DRY_RUN:{}", hex::encode(serialize(&tx))));
+    }
+
+    // Sign each input with its corresponding key
+    for (idx, (utxo, key, addr)) in p.inputs.iter().enumerate() {
+        sign_p2wpkh_input(&mut tx, idx, key, addr, utxo.amount_sats)?;
+    }
+
+    Ok(hex::encode(serialize(&tx)))
+}
+
+// ── Shared P2WPKH signing logic ──────────────────────────────────────────────
+
+/// Signs a single P2WPKH input in-place.
+///
+/// Computes the BIP-143 segwit sighash and inserts the signature + pubkey
+/// into the witness field at the given input index.
+fn sign_p2wpkh_input(
+    tx: &mut Transaction,
+    input_idx: usize,
+    secret_key: &SecretKey,
+    from_address: &Address,
+    input_sats: u64,
+) -> Result<(), String> {
     let secp = Secp256k1::new();
-    let pub_key = bitcoin::PublicKey::new(p.from_key.public_key(&secp));
-    
-    // For P2WPKH, the scriptCode used for the sighash is actually the P2PKH script pubkey
-    // of the same public key.
-    let script_code = Address::p2pkh(&pub_key, p.from_address.network).script_pubkey();
-    
+    let pub_key = bitcoin::PublicKey::new(secret_key.public_key(&secp));
+
+    // For P2WPKH, the scriptCode used for the sighash is the P2PKH script pubkey
+    let script_code = Address::p2pkh(&pub_key, from_address.network).script_pubkey();
+
     let sighash = {
-        let mut cache = SighashCache::new(&tx);
-        cache.segwit_signature_hash(0, &script_code, p.input_sats, EcdsaSighashType::All)
-            .map_err(|e| format!("Sighash failed: {}", e))?
+        let mut cache = SighashCache::new(&*tx);
+        cache.segwit_signature_hash(input_idx, &script_code, input_sats, EcdsaSighashType::All)
+            .map_err(|e| format!("Sighash failed on input {}: {}", input_idx, e))?
     };
 
     let msg = Message::from_slice(sighash.as_ref())
         .map_err(|e| format!("Message error: {}", e))?;
 
-    let sig = secp.sign_ecdsa(&msg, p.from_key);
+    let sig = secp.sign_ecdsa(&msg, secret_key);
     let mut sig_bytes = sig.serialize_der().to_vec();
     sig_bytes.push(EcdsaSighashType::All as u8);
 
-    let pubkey_bytes = p.from_key.public_key(&secp).serialize();
-    
+    let pubkey_bytes = secret_key.public_key(&secp).serialize();
+
     // In SegWit, the scriptSig is empty and signatures go into the Witness field
-    tx.input[0].script_sig = Builder::new().into_script();
-    
+    tx.input[input_idx].script_sig = Builder::new().into_script();
+
     let mut witness = Witness::new();
     witness.push(&sig_bytes);
     witness.push(&pubkey_bytes);
-    tx.input[0].witness = witness;
+    tx.input[input_idx].witness = witness;
 
-    Ok(hex::encode(serialize(&tx)))
+    Ok(())
 }

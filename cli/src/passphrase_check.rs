@@ -1,41 +1,12 @@
 use crate::ui;
 
-/// Strength tier for a passphrase.
-pub enum Tier { VeryWeak, Weak, Fair, Strong, VeryStrong }
-
-/// Minimum score (inclusive) that a non-empty passphrase must reach.
-/// Score 4 corresponds to the `Fair` tier.
-pub const MIN_SCORE: u8 = 4;
-pub const MIN_LABEL: &str = "Fair";
+// Re-export constants from the core module for backward compatibility
+pub use boma_core::passphrase_strength::{MIN_SCORE, MIN_LABEL};
 
 /// Returns `true` when the passphrase meets the minimum strength requirement.
 /// Empty passphrases are rejected before this function is reached.
 pub fn is_strong_enough(passphrase: &str) -> bool {
-    let (_, s, _) = score(passphrase);
-    s >= MIN_SCORE
-}
-
-/// Scores a passphrase 0–7 and returns its tier and advice.
-pub fn score(passphrase: &str) -> (Tier, u8, &'static str) {
-    let mut s: u8 = 0;
-    let n = passphrase.len();
-
-    if n >= 8  { s += 1; }
-    if n >= 12 { s += 1; }
-    if n >= 16 { s += 1; }
-    if passphrase.chars().any(|c| c.is_uppercase())           { s += 1; }
-    if passphrase.chars().any(|c| c.is_ascii_digit())         { s += 1; }
-    if passphrase.chars().any(|c| "!@#$%^&*()-_=+[]{}|;:',.<>/?`~".contains(c)) { s += 1; }
-    if passphrase.chars().any(|c| (c as u32) > 127)           { s += 1; }
-
-    let (tier, advice) = match s {
-        0..=1 => (Tier::VeryWeak,  "Too short. Use at least 12 characters."),
-        2..=3 => (Tier::Weak,      "Add uppercase letters, numbers, or symbols."),
-        4     => (Tier::Fair,      "Good start — try making it longer."),
-        5..=6 => (Tier::Strong,    "Strong passphrase!"),
-        _     => (Tier::VeryStrong,"Excellent passphrase!"),
-    };
-    (tier, s, advice)
+    boma_core::passphrase_strength::is_strong_enough(passphrase)
 }
 
 /// Prints a colour-coded strength bar and advice line.
@@ -44,17 +15,18 @@ pub fn display(passphrase: &str) {
         ui::warn("No passphrase set. Mnemonic alone protects your funds.");
         return;
     }
-    let (tier, s, advice) = score(passphrase);
+    let (tier, s, advice) = boma_core::passphrase_strength::score(passphrase);
+    let label = boma_core::passphrase_strength::tier_label(tier);
     let max = 7usize;
     let bar_len = 24usize;
     let filled = ((s as usize) * bar_len / max).min(bar_len);
 
-    let (color, label) = match tier {
-        Tier::VeryWeak   => (ui::RED,    "Very Weak"),
-        Tier::Weak       => (ui::YELLOW, "Weak     "),
-        Tier::Fair       => (ui::YELLOW, "Fair     "),
-        Tier::Strong     => (ui::GREEN,  "Strong   "),
-        Tier::VeryStrong => (ui::GREEN,  "Excellent"),
+    let color = match tier {
+        boma_core::passphrase_strength::Tier::VeryWeak   => ui::RED,
+        boma_core::passphrase_strength::Tier::Weak       => ui::YELLOW,
+        boma_core::passphrase_strength::Tier::Fair       => ui::YELLOW,
+        boma_core::passphrase_strength::Tier::Strong     => ui::GREEN,
+        boma_core::passphrase_strength::Tier::VeryStrong => ui::GREEN,
     };
 
     println!(

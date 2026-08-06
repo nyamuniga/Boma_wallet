@@ -123,7 +123,7 @@ export default function AuthScreen({ onLogin, showToast }: Props) {
         <p className="text-center text-neutral-500 text-sm tracking-widest uppercase mb-10">Cold Storage</p>
 
         {newWallet ? (
-          <MnemonicDisplay wallet={newWallet} onDone={handleDoneWithPhrase} />
+          <MnemonicDisplay wallet={newWallet} passphrase={passphrase} onDone={handleDoneWithPhrase} />
         ) : view === "main" ? (
           <MainMenu onSelect={setView} />
         ) : view === "settings" ? (
@@ -238,7 +238,29 @@ function PassphraseForm({
   );
 }
 
-function MnemonicDisplay({ wallet, onDone }: { wallet: WalletData; onDone: () => void }) {
+function MnemonicDisplay({ wallet, passphrase, onDone }: { wallet: WalletData; passphrase: string; onDone: () => void }) {
+  const [words, setWords] = useState<string[]>([]);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    const fetchWords = async () => {
+      try {
+        const fetched: string[] = [];
+        for (let i = 0; i < wallet.word_count; i++) {
+          const word = await invoke<string>("get_mnemonic_word", { passphrase, index: i });
+          if (!active) return;
+          fetched.push(word);
+        }
+        setWords(fetched);
+      } catch (e: any) {
+        if (active) setError(String(e));
+      }
+    };
+    fetchWords();
+    return () => { active = false; };
+  }, [wallet.word_count, passphrase]);
+
   return (
     <div className="space-y-6">
       <div className="p-4 bg-orange-950/30 border border-orange-500/30 rounded-lg">
@@ -247,21 +269,27 @@ function MnemonicDisplay({ wallet, onDone }: { wallet: WalletData; onDone: () =>
           Backup Required
         </h3>
         <p className="text-sm text-neutral-300">
-          Write down these 24 words. Never type them on an internet-connected device.
+          Write down these {wallet.word_count} words. Never type them on an internet-connected device.
         </p>
       </div>
+      {error && <div className="text-red-400 text-sm p-3 bg-red-950/30 border border-red-500/30 rounded">{error}</div>}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-        {wallet.mnemonic.split(" ").map((word, i) => (
-          <div key={i} className="bg-neutral-900 border border-neutral-800 px-2 py-1 rounded text-xs font-mono text-center flex justify-between">
-            <span className="text-neutral-600">{i + 1}.</span>
-            <span className="text-neutral-200">{word}</span>
-          </div>
-        ))}
+        {words.length === 0 && !error ? (
+          <p className="text-neutral-500 text-sm col-span-3 text-center py-4">Loading phrase...</p>
+        ) : (
+          words.map((word, i) => (
+            <div key={i} className="bg-neutral-900 border border-neutral-800 px-2 py-1 rounded text-xs font-mono text-center flex justify-between">
+              <span className="text-neutral-600">{i + 1}.</span>
+              <span className="text-neutral-200">{word}</span>
+            </div>
+          ))
+        )}
       </div>
       <button
         id="mnemonic-done"
         onClick={onDone}
-        className="w-full py-3 bg-neutral-900 border border-neutral-700 text-white rounded hover:border-orange-500 hover:text-orange-400 transition-all uppercase tracking-widest text-sm font-bold"
+        disabled={words.length !== wallet.word_count}
+        className="w-full py-3 bg-neutral-900 border border-neutral-700 text-white rounded hover:border-orange-500 hover:text-orange-400 transition-all uppercase tracking-widest text-sm font-bold disabled:opacity-50"
       >
         I have written them down
       </button>

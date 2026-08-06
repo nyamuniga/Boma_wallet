@@ -12,11 +12,13 @@ use crate::ui;
 /// Full interactive guided send flow with all safety checks.
 ///
 /// Collects the parameters and returns a populated TxParams struct.
+/// `change_index` selects which change address to use (rotated after each tx).
 pub fn collect_send_params<'a>(
     receive_addresses: &'a [(Address, SecretKey)],
     change_addresses: &'a [(Address, SecretKey)],
     preloaded_utxos: &[Utxo],
     dry_run: bool,
+    change_index: usize,
 ) -> Result<TxParams<'a>, String> {
     let crumb = if dry_run { "Wallet > Dry Run" } else { "Wallet > Sign Transaction" };
     ui::header("", crumb);
@@ -134,12 +136,14 @@ pub fn collect_send_params<'a>(
 
     // ── Step 6: Change address ────────────────────────────────────────────────
     ui::section("Step 6/6 — Change address");
+    // H2: Use rotating change address instead of always index 0
     let change_address = if change_addresses.is_empty() {
         ui::warn("No change addresses available — change will go back to your sending address.");
         from_address
     } else {
-        ui::info("This keeps your change on a separate internal address (BIP-44 standard).");
-        &change_addresses[0].0
+        let idx = change_index % change_addresses.len();
+        ui::info(&format!("Change will go to internal address index {} (auto-rotated).", idx));
+        &change_addresses[idx].0
     };
 
     let change_sats = input_sats.saturating_sub(send_sats + fee_sats);
