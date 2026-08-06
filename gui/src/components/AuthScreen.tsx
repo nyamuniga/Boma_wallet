@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { getVersion } from "@tauri-apps/api/app";
 import { WalletData, DashboardData, AuthView } from "../types";
 import { ToastType } from "../hooks/useToast";
 
@@ -12,19 +13,19 @@ const MAX_SCORE = 7;
 function scorePassphrase(p: string): { score: number; label: string; color: string } {
   let s = 0;
   const n = p.length;
-  if (n >= 8)  s++;
+  if (n >= 8) s++;
   if (n >= 12) s++;
   if (n >= 16) s++;
-  if (/[A-Z]/.test(p))                              s++;
-  if (/[0-9]/.test(p))                              s++;
+  if (/[A-Z]/.test(p)) s++;
+  if (/[0-9]/.test(p)) s++;
   if (/[!@#$%^&*()\-_=+[\]{}|;:',.<>/?`~]/.test(p)) s++;
-  if ([...p].some(c => c.codePointAt(0)! > 127))   s++;
+  if ([...p].some(c => c.codePointAt(0)! > 127)) s++;
 
-  if (s <= 1) return { score: s, label: "Very Weak",  color: "#ef4444" };
-  if (s <= 3) return { score: s, label: "Weak",        color: "#f59e0b" };
-  if (s === 4) return { score: s, label: "Fair",        color: "#eab308" };
-  if (s <= 6) return { score: s, label: "Strong",      color: "#22c55e" };
-  return       { score: s, label: "Excellent",     color: "#10b981" };
+  if (s <= 1) return { score: s, label: "Very Weak", color: "#ef4444" };
+  if (s <= 3) return { score: s, label: "Weak", color: "#f59e0b" };
+  if (s === 4) return { score: s, label: "Fair", color: "#eab308" };
+  if (s <= 6) return { score: s, label: "Strong", color: "#22c55e" };
+  return { score: s, label: "Excellent", color: "#10b981" };
 }
 
 function StrengthMeter({ passphrase }: { passphrase: string }) {
@@ -63,11 +64,16 @@ interface Props {
 // passphrase entry flows. Single responsibility: authentication only.
 
 export default function AuthScreen({ onLogin, showToast }: Props) {
-  const [view, setView]         = useState<AuthView>("main");
-  const [passphrase, setPass]   = useState("");
-  const [error, setError]       = useState("");
-  const [loading, setLoading]   = useState(false);
+  const [view, setView] = useState<AuthView>("main");
+  const [passphrase, setPass] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
   const [newWallet, setNewWallet] = useState<WalletData | null>(null);
+  const [version, setVersion] = useState("");
+
+  useEffect(() => {
+    getVersion().then(setVersion).catch(() => { });
+  }, []);
 
   // ── Handlers ─────────────────────────────────────────────────────────
 
@@ -120,7 +126,10 @@ export default function AuthScreen({ onLogin, showToast }: Props) {
         <h1 className="text-4xl text-center font-light tracking-widest text-orange-400 uppercase drop-shadow-[0_0_8px_rgba(165,81,48,0.6)] mb-2 mt-4">
           BOMA
         </h1>
-        <p className="text-center text-neutral-500 text-sm tracking-widest uppercase mb-10">Cold Storage</p>
+        <p className="text-center text-neutral-500 text-sm tracking-widest uppercase mb-10 flex justify-center items-center gap-2">
+          Cold Storage
+          {version && <span className="text-orange-500 text-xs px-1.5 py-0.5 border border-orange-500/20 rounded">v{version}</span>}
+        </p>
 
         {newWallet ? (
           <MnemonicDisplay wallet={newWallet} passphrase={passphrase} onDone={handleDoneWithPhrase} />
@@ -150,11 +159,11 @@ export default function AuthScreen({ onLogin, showToast }: Props) {
 
 function MainMenu({ onSelect }: { onSelect: (v: AuthView) => void }) {
   const items: { key: AuthView; label: string }[] = [
-    { key: "create",   label: "Create a new wallet" },
-    { key: "open",     label: "Open existing wallet" },
-    { key: "verify",   label: "Verify backup integrity" },
+    { key: "create", label: "Create a new wallet" },
+    { key: "open", label: "Open existing wallet" },
+    { key: "verify", label: "Verify backup integrity" },
     { key: "settings", label: "Settings" },
-    { key: "restore",  label: "Restore from recovery phrase" },
+    { key: "restore", label: "Restore from recovery phrase" },
   ];
   return (
     <div className="space-y-3 font-mono">
@@ -184,20 +193,20 @@ function PassphraseForm({
   error: string;
   loading: boolean;
 }) {
-  const isCreate  = view === "create";
-  const label     = isCreate ? "Create Passphrase" : "Enter Passphrase";
-  const btnLabel  = loading ? "Processing..." : isCreate ? "Create Wallet" : view === "verify" ? "Verify Backup" : "Unlock Wallet";
+  const isCreate = view === "create";
+  const label = isCreate ? "Create Passphrase" : "Enter Passphrase";
+  const btnLabel = loading ? "Processing..." : isCreate ? "Create Wallet" : view === "verify" ? "Verify Backup" : "Unlock Wallet";
 
   // On the create screen: block if passphrase is empty OR too weak.
-  const isEmpty  = isCreate && passphrase.length === 0;
-  const tooWeak  = isCreate && passphrase.length > 0 && scorePassphrase(passphrase).score < MIN_SCORE;
+  const isEmpty = isCreate && passphrase.length === 0;
+  const tooWeak = isCreate && passphrase.length > 0 && scorePassphrase(passphrase).score < MIN_SCORE;
   const disabled = loading || isEmpty || tooWeak;
 
   const disabledTitle = isEmpty
     ? "A passphrase is required — you cannot create a wallet without one."
     : tooWeak
-    ? `Passphrase must reach at least "Fair" strength (${MIN_SCORE}/${MAX_SCORE} pts)`
-    : undefined;
+      ? `Passphrase must reach at least "Fair" strength (${MIN_SCORE}/${MAX_SCORE} pts)`
+      : undefined;
 
   return (
     <form onSubmit={onSubmit} className="space-y-6">
@@ -298,9 +307,9 @@ function MnemonicDisplay({ wallet, passphrase, onDone }: { wallet: WalletData; p
 }
 
 function SettingsPanel({ onBack, showToast }: { onBack: () => void; showToast: (m: string, t?: ToastType) => void }) {
-  const [network, setNetwork]   = useState("mainnet");
-  const [timeout, setTimeout_]  = useState(300);
-  const [loaded, setLoaded]     = useState(false);
+  const [network, setNetwork] = useState("mainnet");
+  const [timeout, setTimeout_] = useState(300);
+  const [loaded, setLoaded] = useState(false);
 
   // Load settings once on mount — never inline invoke() in the render body
   useEffect(() => {
