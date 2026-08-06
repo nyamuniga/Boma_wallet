@@ -385,7 +385,7 @@ dependencies = [
 
 [[package]]
 name = "boma-cli"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "bip39",
  "bitcoin",
@@ -399,7 +399,7 @@ dependencies = [
 
 [[package]]
 name = "boma-core"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "aes-gcm",
  "argon2",

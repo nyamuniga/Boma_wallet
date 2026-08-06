@@ -1,4 +1,6 @@
+import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { getVersion } from "@tauri-apps/api/app";
 import { save } from "@tauri-apps/plugin-dialog";
 import { writeTextFile } from "@tauri-apps/plugin-fs";
 import { DashboardData } from "../types";
@@ -17,6 +19,11 @@ interface Props {
 // Single responsibility: display the menu and route to sub-views.
 
 export default function WalletMenu({ dashboard, passphrase, onNavigate, onLock, showToast }: Props) {
+  const [version, setVersion] = useState("");
+
+  useEffect(() => {
+    getVersion().then(setVersion).catch(() => {});
+  }, []);
 
   const handleExportXpub = async () => {
     try {
@@ -42,7 +49,10 @@ export default function WalletMenu({ dashboard, passphrase, onNavigate, onLock, 
     <div className="min-h-screen bg-black p-4 sm:p-8 font-mono flex items-center justify-center">
       <div className="w-full max-w-3xl border border-neutral-800 bg-neutral-950 p-4 sm:p-8 rounded">
         <div className="mb-8 border-b border-orange-500/30 pb-4 flex flex-wrap justify-between items-center gap-2">
-          <h1 className="text-xl text-orange-400 uppercase tracking-widest">Wallet Menu</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-xl text-orange-400 uppercase tracking-widest">Wallet Menu</h1>
+            {version && <span className="text-orange-500/50 text-xs px-1.5 py-0.5 border border-orange-500/20 rounded">v{version}</span>}
+          </div>
           <span className="text-neutral-500 text-xs font-mono truncate max-w-[180px] sm:max-w-none">[{dashboard.fingerprint}]</span>
         </div>
 
